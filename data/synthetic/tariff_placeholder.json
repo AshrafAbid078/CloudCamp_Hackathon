@@ -1,0 +1,19 @@
+{
+    "description": "Simplified Time-of-Use (TOU) electricity tariff placeholder. Values in USD/kWh.",
+    "currency": "USD",
+    "unit": "kWh",
+    "rates": {
+        "off_peak": {
+            "price": 0.05,
+            "hours": [0, 1, 2, 3, 4, 5, 6, 22, 23]
+        },
+        "mid_peak": {
+            "price": 0.10,
+            "hours": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        },
+        "on_peak": {
+            "price": 0.20,
+            "hours": [17, 18, 19, 20, 21]
+        }
+    }
+}

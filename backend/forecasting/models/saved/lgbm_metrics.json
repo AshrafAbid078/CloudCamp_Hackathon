@@ -1,0 +1,8 @@
+{
+  "model": "LightGBM",
+  "rmse": 122.2578,
+  "mape": 0.506,
+  "test_size": 771,
+  "split": "80/20 time-based, daytime-only mask (GHI > 10 W/m2)",
+  "note": "LightGBM MAPE is higher than persistence baseline on this run \u2014 expected for 24h-ahead target without hyperparameter tuning. RMSE is lower (122 vs 140 W/m2), so LightGBM is still preferred. Tuning is a Phase 6 stretch goal."
+}
