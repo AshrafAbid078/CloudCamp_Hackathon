@@ -10,20 +10,20 @@ This feeds directly into the submission's Data & AI Provenance table (per `docs/
 | # | File | Source | Region | Date Range | Granularity | Key Columns | Null Rate | Notes |
 |---|------|--------|--------|------------|-------------|-------------|-----------|-------|
 | 1 | `bangladesh_nsrdb_clean.parquet` | [NREL NSRDB](https://nsrdb.nrel.gov/) | Bangladesh (23.7°N 90.4°E) | 2018-01-01 → 2020-12-31 (UTC) | Hourly | GHI, DNI, DHI, Temperature, Wind Speed, Cloud Type | Low (<1%) | 26,304 rows. One-axis tracking configuration. Timestamps converted from Asia/Dhaka to UTC. |
-| 2 | `bangladesh_gfs_clean.parquet` | NOAA GFS | Bangladesh | Short window (~17 days, Jan 2020) | 3-hourly → hourly (ffill) | cloud_cover_max_isobaric, temp_2m_k, wind_u/v, precip | None | **Sparse — only 135 rows.** GFS provides short-range NWP forecasts. Forward-fill applied to interpolate to hourly. |
+| 2 | `bangladesh_gfs_clean.parquet` | NOAA GFS | Bangladesh | 2020-01-01 → 2020-05-15 (raw monthly files `Bangladesh_GFS_2020_01..05.csv`) | 3-hourly → hourly (ffill) | cloud_cover_max_isobaric, temp_2m_k, wind_u/v, precip | None | GFS provides short-range NWP forecasts. Forward-fill applied to interpolate to hourly; rows after the GFS window are forward-filled. Processed row count not re-verified after the loader started ingesting all five monthly files. |
 | 3 | `bangladesh_carbon_intensity_clean.parquet` | [Electricity Maps API](https://app.electricitymaps.com/) | Bangladesh | ~1 day of static history (288 rows) | Hourly | carbon_intensity_gco2eq_kwh, isEstimated, estimationMethod | None | **Very short static history.** Supplemented by DB auto-poll (see §Auto-Poll below). |
 | 4 | `bangladesh_electricity_mix_clean.parquet` | Electricity Maps API | Bangladesh | Same window as carbon (~288 rows) | Hourly | coal, gas, solar, wind, hydro, oil (% share) | Sparse (many sources 0 or null) | Renewable columns (nuclear, geothermal) are 0 for Bangladesh — correct. |
 | 5 | `bangladesh_electricity_maps_clean.parquet` | Electricity Maps API | Bangladesh | Short (~96 rows) | Hourly | Same mix + hydro_storage, battery_storage flows | Sparse | Includes storage flows. 96 rows only. |
-| 6 | `data/synthetic/facilities.parquet` | Generated (`facility_generator.py`) | N/A | N/A | N/A | name, power_kw, earliest_start, deadline, duration_hours | None | Seeded synthetic (seed=42). **20** flexible industrial processes. |
-| 7 | `data/synthetic/batteries.parquet` | Generated (`battery_generator.py`) | N/A | N/A | N/A | capacity_kwh, current_soc, max_charge_rate_kw, max_discharge_rate_kw | None | Seeded synthetic (seed=123). **5** battery assets. |
-| 8 | `data/synthetic/tariff_placeholder.json` | Approximated from BREB/PDB published slabs | Bangladesh | Current | N/A | flat_rate, peak_rate, off_peak_rate (BDT/kWh) | N/A | **Approximation only.** Simplified BREB residential/industrial slab rates. Labeled as placeholder in code. |
+| 6 | `data/synthetic/facilities.parquet` | Generated (`facility_generator.py`) | N/A | N/A | N/A | name, power_kw, earliest_start, deadline, duration | None | Seeded synthetic (seed=42). **20** flexible industrial processes. |
+| 7 | `data/synthetic/batteries.parquet` | Generated (`battery_generator.py`) | N/A | N/A | N/A | capacity_kwh, current_soc, charge_rate_kw, discharge_rate_kw | None | Seeded synthetic (seed=123). **5** battery assets. |
+| 8 | `data/synthetic/tariff_placeholder.json` | Approximated from BREB/PDB published slabs | Bangladesh | Current | N/A | TOU tiers off_peak / mid_peak / on_peak (USD/kWh) | N/A | **Approximation only.** Simplified BREB residential/industrial slab rates. Labeled as placeholder in code. |
 
 ---
 
 ## Known Gaps & Decisions
 
 ### GFS Sparsity
-GFS data covers only ~17 days (135 rows at 3-hour resolution). Used as a supplementary feature via forward-fill join. Model works without GFS (`gfs_df=None` path in `build_features()`). A live GFS API integration would replace this for production.
+GFS raw data covers 2020-01-01 → 2020-05-15 only (3-hour resolution); later NSRDB rows are forward-filled. Used as a supplementary feature via forward-fill join. Model works without GFS (`gfs_df=None` path in `build_features()`). A live GFS API integration would replace this for production.
 
 ### Carbon Intensity History (~1 day static)
 Electricity Maps API free tier returns very limited history. Grid-stress forecast uses simple persistence extrapolation of last known value — deliberate, documented in code.

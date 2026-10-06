@@ -91,7 +91,7 @@ APScheduler `BackgroundScheduler` runs `poll_carbon_intensity()` every `POLL_INT
 - Written readings go to the `carbon_snapshots` table, growing the carbon history daily.
 
 ### E. Data Ingestion (`backend/data_pipeline/`)
-- **NSRDB Loader:** Pulls solar irradiance data (Live: Bangladesh).
+- **NSRDB Loader:** Pulls solar irradiance data (cached historical data: Bangladesh).
 - **NOAA GFS Client:** Pulls cloud-cover/atmospheric data.
 - **Electricity Maps Client:** Pulls real-time CO2 intensity + power mix. **Rule:** Must cache last-good response and degrade gracefully.
 - **Synthetic Generators:** Seeds flexible industrial processes and battery states. **Rule:** No real personal/facility data allowed.

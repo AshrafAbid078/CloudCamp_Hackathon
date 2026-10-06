@@ -12,6 +12,12 @@ Usage:
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# backend/ and the repository root. Both are searched for a .env file so the
+# documented `cp .env.example .env` (repo root) works no matter which
+# directory uvicorn/pytest is launched from. backend/.env overrides root .env.
+_BACKEND_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _BACKEND_DIR.parent
+
 
 class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
@@ -51,8 +57,14 @@ class Settings(BaseSettings):
     poll_region: str = "BD"
     """ISO 3166-1 alpha-2 zone code used by Electricity Maps (Bangladesh = BD)."""
 
+    # ------------------------------------------------------------------ #
+    # CORS                                                                 #
+    # ------------------------------------------------------------------ #
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    """Comma-separated browser origins allowed to call the API (the frontend)."""
+
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(str(_PROJECT_ROOT / ".env"), str(_BACKEND_DIR / ".env")),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

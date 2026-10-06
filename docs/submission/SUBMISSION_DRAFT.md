@@ -15,7 +15,7 @@ Structured field-for-field against the official Submission Process doc — the 8
 | One-line pitch | An AI engine that forecasts solar output and grid stress, then schedules any flexible energy asset — industrial processes, batteries, EV fleets — into the cheapest, cleanest window, and explains every decision in plain language, for factories and grid operators alike. |
 | Chosen domain | ClimaTech |
 | Chosen challenge | Energy Brain — Smart energy optimization and demand response (named challenge, not self-defined) |
-| Public summary paragraph | Meridian Grid is an AI system that predicts when power will be cheap and clean — from solar output to grid carbon intensity — and automatically works out how to shift a facility's flexible energy use (industrial processes, battery storage, and eventually EV charging) into those windows. A built-in conversational copilot explains every recommendation in plain language, adapting its tone for a factory manager or a technical grid operator. Piloted live on industrial facilities in Bangladesh — garment manufacturing and cold storage, sectors with real grid unreliability and growing solar adoption — the system is architected from day one to generalize to any region and any flexible asset type. |
+| Public summary paragraph | Meridian Grid is an AI system that predicts when power will be cheap and clean — from solar output to grid carbon intensity — and automatically works out how to shift a facility's flexible energy use (industrial processes, battery storage, and eventually EV charging) into those windows. A conversational copilot (in development) is designed to explain each recommendation in plain language, adapting its tone for a factory manager or a technical grid operator. Built for industrial facilities in Bangladesh — garment manufacturing and cold storage, sectors with real grid unreliability and growing solar adoption — and currently running on Bangladesh solar data and synthetic facilities, the system is architected from day one to generalize to any region and any flexible asset type. |
 | Primary team language | English |
 
 ### Team & Mentor Engagement `[Preliminary]`
@@ -31,13 +31,13 @@ Structured field-for-field against the official Submission Process doc — the 8
 
 ## 2. Problem Statement `[Preliminary + Final]`
 
-**Who:** Industrial facility managers — piloted on Bangladesh's RMG/garment and cold-storage sectors, generalizable to any market with unreliable grid supply and growing solar adoption.
+**Who:** Industrial facility managers — focused on Bangladesh's RMG/garment and cold-storage sectors, generalizable to any market with unreliable grid supply and growing solar adoption.
 
 **What problem they face today:** Facility managers make load-timing and battery-dispatch decisions on instinct or a fixed schedule. No tool turns "solar output will spike at 1pm" or "the grid is under stress right now" into a specific, explained action for their actual equipment.
 
 **Why existing solutions fail:** Building management/SCADA systems log data but don't forecast or recommend anything. Enterprise energy management platforms assume mature-grid data availability (consistent pricing feeds, dense sensor networks) that doesn't exist equally across data sources in a market like Bangladesh, so those tools either don't deploy there or deploy in a degraded, unconvincing form.
 
-**Measurable outcome:** A double-digit percentage reduction in both energy cost and tCO2 emitted from the facility's flexible load and battery use, shown as a live number every session.
+**Target outcome:** A double-digit percentage reduction in both energy cost and tCO2 emitted from the facility's flexible load and battery use, shown as a live number every session. (Target to validate; the current build reports modeled savings on synthetic facilities against a start-at-earliest-time baseline.)
 
 *(Note for judges/context, not a separate form field: the same forecast/optimize/explain engine also serves a second, in-front-of-the-meter problem for utility DR managers and VPP aggregators — detailed in the Business Model section of the idea doc. The Preliminary/Final Problem Statement field stays centered on the facility side since that's what's demoed live.)*
 
@@ -57,16 +57,16 @@ Primary: Industrial facility managers in Bangladesh's RMG/garment and cold-stora
 3. **Agent (Copilot)** — explains every recommendation conversationally, answers "what if" questions by re-running the forecast/optimization (never inventing a number), and adapts its tone to whoever's asking via a role toggle (Facility Manager / Grid Operator).
 
 **AI system architecture:** Two pluggable adapter axes make the engine generalize without needing three regional pipelines or three asset integrations built for this submission:
-- *Region adapter:* Bangladesh is the live pilot (NREL NSRDB + NOAA GFS + Electricity Maps, BD zone). Europe and US/PJM territory are architecture-only — interface stubs, not real data pulled, explicitly disclosed as such.
-- *Asset adapter:* Industrial process shifting and battery/backup storage dispatch are live. EV fleet charging is an architecture-only stub (BD doesn't yet have the fleet data density to make it credible live).
+- *Region adapter:* Bangladesh is the implemented region (NREL NSRDB + NOAA GFS + Electricity Maps, BD zone; synthetic facilities — no real-site pilot). Europe and US/PJM territory are architecture-only — interface stubs, not real data pulled, explicitly disclosed as such.
+- *Asset adapter:* Industrial process shifting and battery/backup storage dispatch are implemented. EV fleet charging is an architecture-only stub (BD doesn't yet have the fleet data density to make it credible live).
 
 **Key features:**
-- Solar + grid-stress forecast for Bangladesh, with confidence band and backtested accuracy
+- Solar + grid-stress forecast for Bangladesh, with backtested accuracy (MVP: fixed ±15% band; carbon forecast is persistence-based)
 - Dispatch schedule across industrial processes + battery, optimizing cost + CO2 against a no-optimization baseline
-- KPI dashboard: $ saved, tCO2 avoided, peak kW shaved
-- Copilot with a role toggle that visibly changes tone/depth, grounded in real tool calls
-- What-if scenario simulation
-- On-dashboard indicators showing what's live vs. architecture-ready, for both adapter axes
+- [Planned] KPI dashboard: $ saved, tCO2 avoided, peak kW shaved (the API already returns these KPIs)
+- [Planned] Copilot with a role toggle that visibly changes tone/depth, grounded in real tool calls
+- [Planned] What-if scenario simulation
+- [Planned] On-dashboard indicators showing what's live vs. architecture-ready, for both adapter axes
 
 **Target user journey:** Facility manager opens the dashboard each morning, sees the forecast and the day's proposed dispatch plan with KPI deltas already calculated, asks the copilot a what-if question when conditions change, approves or overrides specific slots, and gets an end-of-day savings summary. Full walkthrough in `../product/APPLICATION_FLOW.md`.
 
@@ -97,12 +97,12 @@ Reminder: links are validated nightly and can be re-run manually. PASS = fine. R
 
 | Source | Type | Region | Role | License/access |
 |---|---|---|---|---|
-| NREL NSRDB | Public dataset | South/SE Asia (confirmed BD coverage) | Live — solar irradiance input to forecaster | Public |
-| NOAA GFS | Public dataset | Global | Live — cloud-cover/atmospheric input to forecaster | Public |
-| Electricity Maps API | Real-time API | Bangladesh zone | Live — grid CO2 intensity + power mix | Free tier; BD zone disclosed as a lower/estimated data tier, not fully measured |
+| NREL NSRDB | Public dataset | South/SE Asia (confirmed BD coverage) | Historical cached data (2018–2020) — forecaster training and demo input | Public |
+| NOAA GFS | Public dataset | Global | Historical cached sample (2020-01 to 2020-05) — cloud-cover features | Public |
+| Electricity Maps API | Real-time API | Bangladesh zone | Live poll — grid CO2 intensity + power mix (history just starting to accumulate) | Free tier; BD zone disclosed as a lower/estimated data tier, not fully measured |
 | Open Power System Data | Public dataset | Europe only | Architecture reference only — not pulled as real data | Open license |
 | PJM Data Miner | Public/registered API | US (PJM territory) only | Architecture reference only — not pulled as real data | Registration required (not used) |
-| Synthetic facility & battery data | Generated | N/A | Live — no real personal or facility data used anywhere | N/A |
+| Synthetic facility & battery data | Generated | N/A | Used for demo and tests — no real personal or facility data used anywhere | N/A |
 
 **Personal data handling:** No real personal or facility data is used at any point. All facility/asset data is synthetically generated and seeded for reproducibility, per the event's no-real-personal-data rule.
 

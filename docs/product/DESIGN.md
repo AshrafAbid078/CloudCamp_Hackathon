@@ -40,9 +40,9 @@ Full journey: see `APPLICATION_FLOW.md`.
 | Optimization | Schedules registered flexible assets to minimize a blended cost + emissions objective, respecting real constraints |
 | Agent (Copilot) | Explains recommendations, answers what-ifs via real tool calls, adapts tone via a role parameter (facility_manager / grid_operator) |
 
-**Region adapter:** Bangladesh live (NSRDB + NOAA GFS + Electricity Maps BD zone); Europe and US/PJM territory are architecture-only stubs — interface defined, no real data pulled, explicitly disclosed.
+**Region adapter:** Bangladesh implemented (NSRDB + NOAA GFS cached historical data + Electricity Maps BD zone live poll); Europe and US/PJM territory are architecture-only stubs — interface defined, no real data pulled, explicitly disclosed.
 
-**Asset adapter:** Industrial process shifting and battery/backup storage dispatch are live; EV fleet charging is an architecture-only stub.
+**Asset adapter:** Industrial process shifting and battery/backup storage dispatch are implemented; EV fleet charging is an architecture-only stub.
 
 ## 4. Features
 

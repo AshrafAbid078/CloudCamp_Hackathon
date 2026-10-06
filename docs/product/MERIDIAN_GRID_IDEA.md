@@ -73,8 +73,8 @@ The engine is architected on two independent adapter axes, so it can visibly pro
 
 | Asset type | Status for this build |
 |---|---|
-| Industrial flexible process shifting | **Live** — the primary demo asset |
-| Battery / backup storage dispatch | **Live-adjacent** — genuinely free upside, since most Bangladeshi RMG/cold-storage sites already run batteries or diesel gensets as backup due to grid unreliability. Optimizing when an already-owned battery charges/discharges is a real feature computable from data already being ingested, not a new pipeline. |
+| Industrial flexible process shifting | **Implemented** — the primary demo asset |
+| Battery / backup storage dispatch | **Implemented** — genuinely free upside, since most Bangladeshi RMG/cold-storage sites already run batteries or diesel gensets as backup due to grid unreliability. Optimizing when an already-owned battery charges/discharges is a real feature computable from data already being ingested, not a new pipeline. |
 | EV fleet charging | Architecture-only stub — interface defined and disclosed, not wired to real data. BD doesn't yet have the EV fleet density/data to make this credible live. |
 
 Both stub branches (regions and EV) are implemented in code as classes that document exactly what they'd connect to and raise a clear "not yet implemented" signal — so the generalization claim is backed by actual interface code, not only a slide.

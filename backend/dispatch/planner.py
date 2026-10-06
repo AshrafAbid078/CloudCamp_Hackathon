@@ -138,6 +138,11 @@ def dispatch_plan(
     total_baseline_objective = 0.0
     total_optimized_objective = 0.0
 
+    # Hourly grid-import profiles (kW) used for the system-level peak KPI.
+    horizon = len(prices)
+    baseline_load_kw = [0.0] * horizon
+    optimized_load_kw = [0.0] * horizon
+
     # =================================================
     # INDUSTRIAL PROCESSES
     # =================================================
@@ -170,6 +175,14 @@ def dispatch_plan(
             baseline["objective"]
             - optimized["objective"]
         )
+
+        for h in baseline["hours"]:
+            if 0 <= h < horizon:
+                baseline_load_kw[h] += process.power_kw
+
+        for h in optimized["hours"]:
+            if 0 <= h < horizon:
+                optimized_load_kw[h] += process.power_kw
 
         total_baseline_cost += baseline["cost"]
         total_optimized_cost += optimized["cost"]
@@ -268,6 +281,12 @@ def dispatch_plan(
             - optimized_objective
         )
 
+        # Battery grid import = charge - discharge (baseline battery is idle).
+        for item in schedule:
+            h = item["hour"]
+            if 0 <= h < horizon:
+                optimized_load_kw[h] += item["charge_kw"] - item["discharge_kw"]
+
         total_baseline_cost += baseline_cost
         total_optimized_cost += optimized_cost
 
@@ -343,6 +362,10 @@ def dispatch_plan(
         - total_optimized_objective
     )
 
+    peak_baseline_kw = max(baseline_load_kw, default=0.0)
+    peak_optimized_kw = max(optimized_load_kw, default=0.0)
+    peak_shaved_kw = peak_baseline_kw - peak_optimized_kw
+
     return {
         "industrial": industrial_results,
 
@@ -352,6 +375,16 @@ def dispatch_plan(
             "baseline_cost": total_baseline_cost,
             "optimized_cost": total_optimized_cost,
             "cost_saved": total_cost_saved,
+
+            # Dashboard-ready aliases (cost in USD, emissions in kg).
+            "cost_saved_usd": total_cost_saved,
+            "co2_saved_kg": total_emissions_saved / 1000.0,
+
+            # System-level peak grid import (kW) across all assets.
+            # Negative peak_shaved_kw means the optimized plan raised the peak.
+            "peak_baseline_kw": peak_baseline_kw,
+            "peak_optimized_kw": peak_optimized_kw,
+            "peak_shaved_kw": peak_shaved_kw,
 
             "baseline_emissions_gco2": (
                 total_baseline_emissions

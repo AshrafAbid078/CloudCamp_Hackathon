@@ -22,10 +22,11 @@ pulp>=2.8.0
 
 # Database (Phase 4)
 sqlalchemy>=2.0         # ORM + SQLite engine
+alembic>=1.13.0         # Database migrations
 
 # Auth (Phase 4)
 python-jose[cryptography]>=3.3  # JWT signing
-passlib[bcrypt]>=1.7            # password hashing
+bcrypt>=4.0                       # password hashing (used directly; passlib is unmaintained)
 
 # Background poller (Phase 4)
 apscheduler>=3.10       # recurring background jobs

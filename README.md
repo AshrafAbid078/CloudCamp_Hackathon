@@ -26,7 +26,7 @@ Full structured problem statement: see `docs/product/DESIGN.md` and `docs/produc
 
 **Planned (not built yet):**
 
-- KPI dashboard: $ saved, tCO2 avoided, peak kW shaved (the API already returns these KPIs)
+- KPI dashboard: $ saved, tCO2 avoided, peak kW shaved (the API already returns cost saved, CO2 saved in kg, and peak kW shaved)
 - Conversational copilot with a role toggle (Facility Manager / Grid Operator) grounded in real tool calls
 - What-if scenario simulation
 - Live weather ingestion and solar-aware dispatch
@@ -40,7 +40,7 @@ Full structured problem statement: see `docs/product/DESIGN.md` and `docs/produc
 - **Grid-carbon forecast is persistence** (last known value repeated), and Bangladesh carbon data is an estimated, lower-confidence tier with about one day of history so far.
 - **The solar forecast is not yet an optimizer input.** The optimizer currently schedules on TOU price and grid carbon; with a flat carbon signal it mainly optimizes cost.
 - **Savings figures** are modeled on synthetic facilities against a start-at-earliest-time baseline, not measured at a real site.
-- A default admin account is seeded on first run (forced password change); change it before exposing the API.
+- A default admin account (`admin` / `admin123`) is seeded on first run and flagged `must_change_password`, but the API does not enforce the change; change it before exposing the API.
 
 ## Architecture at a glance
 
@@ -56,7 +56,7 @@ Full user journey and demo script: see `docs/product/APPLICATION_FLOW.md`.
 | Layer | Choice |
 |---|---|
 | Backend | Python 3.11, FastAPI, SQLAlchemy, APScheduler |
-| Auth & DB | JWT (HS256), passlib (bcrypt), SQLite |
+| Auth & DB | JWT (HS256), bcrypt, SQLite |
 | Forecasting | LightGBM/GBM (MVP), LSTM/transformer (stretch) |
 | Optimization | PuLP (linear programming) |
 | Copilot (planned) | Local LLM via Ollama, function-calling, role-aware |

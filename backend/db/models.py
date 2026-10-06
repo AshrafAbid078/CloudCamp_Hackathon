@@ -20,8 +20,36 @@ from sqlalchemy import (
     Integer,
     String,
 )
+from sqlalchemy.types import TypeDecorator
 
 from db.database import Base
+
+
+class UTCDateTime(TypeDecorator):
+    """
+    Timezone-aware UTC datetime for SQLite.
+
+    SQLite has no native timezone support: values are stored as naive
+    timestamps and come back without tzinfo, so isoformat() would omit the
+    UTC offset and a browser would parse it as local time. This type stores
+    everything as UTC and re-attaches tzinfo=UTC when reading.
+    """
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(timezone.utc)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 # ------------------------------------------------------------------ #
@@ -63,7 +91,7 @@ class User(Base):
     """Soft-delete: set False instead of removing the row."""
 
     created_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
@@ -85,7 +113,7 @@ class DispatchRun(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
         index=True,
@@ -131,12 +159,12 @@ class CarbonSnapshot(Base):
 
     # When this reading was polled / when Electricity Maps says it applies
     polled_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
         index=True,
     )
-    reading_datetime = Column(DateTime(timezone=True), nullable=True)
+    reading_datetime = Column(UTCDateTime(), nullable=True)
 
     region = Column(String(8), nullable=False, default="BD")
     carbon_intensity_gco2eq_kwh = Column(Float, nullable=False)

@@ -18,6 +18,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -104,6 +105,15 @@ app = FastAPI(
         "\n\n**Default credentials (change immediately):** `admin` / `admin123`"
     ),
     lifespan=lifespan,
+)
+
+# Allow the browser frontend (default http://localhost:3000) to call the API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth_router)

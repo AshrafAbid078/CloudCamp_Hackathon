@@ -35,7 +35,10 @@ DATABASE_URL = f"sqlite:///{_DB_FILE}"
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},  # required for SQLite + FastAPI
+    # check_same_thread=False: required for SQLite + FastAPI.
+    # timeout: the background poller thread writes while requests read, so
+    # wait up to 30s for a lock instead of failing with "database is locked".
+    connect_args={"check_same_thread": False, "timeout": 30},
     echo=False,                                  # set True to log SQL statements
 )
 

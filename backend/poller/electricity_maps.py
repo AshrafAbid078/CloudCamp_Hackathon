@@ -109,6 +109,26 @@ def poll_carbon_intensity(region: str | None = None) -> CarbonSnapshot | None:
     # ---- Persist to DB ---------------------------------------------------
     db = SessionLocal()
     try:
+        # The scheduler polls immediately on every server start, so avoid
+        # storing the same upstream reading twice after restarts.
+        if reading_dt is not None:
+            existing = (
+                db.query(CarbonSnapshot)
+                .filter(
+                    CarbonSnapshot.region == zone,
+                    CarbonSnapshot.reading_datetime == reading_dt,
+                )
+                .first()
+            )
+            if existing is not None:
+                logger.info(
+                    "[Poller] Reading for zone=%s at %s already stored (id=%s) — skipping insert.",
+                    zone,
+                    reading_dt,
+                    existing.id,
+                )
+                return existing
+
         snapshot = CarbonSnapshot(
             polled_at=datetime.now(timezone.utc),
             reading_datetime=reading_dt,

@@ -64,7 +64,7 @@ frontend/
 - Shorter tagline treatment: "One engine. Any flexible load. Anywhere the sun and the grid don't quite agree."
 - Background visual: a subtle day/night solar-cycle motif (gold sweeping across a navy grid line) rather than stock imagery.
 - Primary CTA button: "Open Dashboard" → navigates to `/login`
-- Stats bar: "10 domains · 100 challenges" context aside, plus live product stats once available — "$X saved this session", "Y forecasts run", "Z sites piloted (Bangladesh, live)"
+- Stats bar: "10 domains · 100 challenges" context aside, plus live product stats once available — "$X saved this session", "Y forecasts run", "Z facilities simulated (Bangladesh data, synthetic)"
 - Adapter framing line, visible without scrolling: "Live: Bangladesh · Architecture-ready: EU, US"
 - Footer: NASA-style data attribution equivalent — NREL NSRDB / NOAA GFS / Electricity Maps credit, team name
 
@@ -77,7 +77,7 @@ frontend/
 - Username/password form, JWT auth (`POST /auth/login`)
 - No role toggle here — role is read from the account, but the copilot/dashboard role-view toggle (Facility Manager / Grid Operator) only becomes active post-login
 - First-boot notice (muted text, non-alarming): seeded admin account must change password on first login
-- "Find My Plan" equivalent: on success, routes straight to `/dashboard` with the user's forecast/dispatch data pre-loaded — no extra selection step, since (unlike a site-picker) Meridian Grid's region is fixed to the live pilot (Bangladesh) for this build
+- "Find My Plan" equivalent: on success, routes straight to `/dashboard` with the user's forecast/dispatch data pre-loaded — no extra selection step, since (unlike a site-picker) Meridian Grid's region is fixed to the implemented region (Bangladesh) for this build
 
 ---
 
@@ -191,6 +191,18 @@ frontend/
 - Consistent loading states (Suspense boundaries) wherever an API is in flight
 - Responsive layout (mobile-friendly), readable on a phone
 - Consistent error handling: a failed API call shows a retry option
+
+---
+
+## Backend API notes for frontend developers
+
+- **Base URL / CORS:** API runs on `http://localhost:8000`. CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` by default; change via `CORS_ORIGINS` in `.env`.
+- **Auth:** `POST /auth/login` returns `access_token`, `role`, `must_change_password`. Send `Authorization: Bearer <token>`.
+- **`must_change_password` is a flag only.** The API does not block other endpoints until the password is changed — the frontend must route the user to `PUT /auth/me/password` when it is `true`.
+- **Dispatch KPIs** (`GET /dispatch/plan` → `plan.kpis`): `cost_saved_usd`, `co2_saved_kg` (also `emissions_saved_gco2`), `peak_baseline_kw`, `peak_optimized_kw`, `peak_shaved_kw`. A negative `peak_shaved_kw` means the optimized plan raised the system peak. Per-asset deltas are in `plan.industrial[]` and `plan.batteries[]`.
+- **`GET /dispatch/history`** (grid_operator/admin only) returns the same three KPIs per run for trend charts.
+- **Forecast timestamps** follow the cached dataset's tail (2020), not the current time — label charts accordingly. Confidence band is a fixed ±15%; grid-stress is a flat persistence line.
+- **Prices** are a placeholder TOU tariff in USD/kWh.
 
 ---
 

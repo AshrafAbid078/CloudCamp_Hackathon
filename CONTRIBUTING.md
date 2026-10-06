@@ -12,7 +12,7 @@ The repository is organized to clearly separate concerns:
 - `data/`: **[IMPLEMENTED]** Contains raw CSVs, processed data, and synthetic datasets.
 - `notebooks/eda/`: **[IMPLEMENTED]** Jupyter notebooks for exploratory data analysis and prototyping.
 - `docs/`: **[IMPLEMENTED]** Comprehensive project documentation organized by architecture, product, development, and team.
-- `scripts/`: Useful project automation scripts.
+- `scripts/`: **[PLANNED]** Useful project automation scripts (folder not created yet).
 
 ## Where Work Happens
 
@@ -54,7 +54,7 @@ The repository is organized to clearly separate concerns:
      ```bash
      cp .env.example .env
      ```
-   - Add your Electricity Maps API key (optional — falls back to cached data).
+   - Add your Electricity Maps API key (optional — without it the live poller is skipped and the cached data is used). The backend reads `.env` from the repo root or from `backend/`.
 
 3. **Backend Setup:**
    - We recommend using a Python virtual environment (venv or conda).

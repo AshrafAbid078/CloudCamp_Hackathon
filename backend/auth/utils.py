@@ -2,7 +2,7 @@
 auth/utils.py — Password Hashing, JWT Signing & FastAPI Dependencies
 =====================================================================
 Provides:
-  - hash_password / verify_password  (bcrypt via passlib)
+  - hash_password / verify_password  (bcrypt, used directly)
   - create_access_token / decode_token  (HS256 JWT via python-jose)
   - get_current_user  (FastAPI Depends — validates Bearer token)
   - require_role(*roles)  (FastAPI Depends factory — role guard)
@@ -11,10 +11,10 @@ Provides:
 from datetime import datetime, timedelta, timezone
 from typing import Sequence
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -26,17 +26,27 @@ from auth.schemas import TokenData
 # Password hashing                                                     #
 # ------------------------------------------------------------------ #
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt only uses the first 72 bytes of a password; bcrypt>=5 raises on longer
+# input, so we truncate explicitly (same effective behaviour as older versions).
+_BCRYPT_MAX_BYTES = 72
+
+
+def _to_bcrypt_bytes(plain: str) -> bytes:
+    return plain.encode("utf-8")[:_BCRYPT_MAX_BYTES]
 
 
 def hash_password(plain: str) -> str:
     """Return a bcrypt hash of *plain*."""
-    return _pwd_context.hash(plain)
+    return bcrypt.hashpw(_to_bcrypt_bytes(plain), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Return True if *plain* matches *hashed*."""
-    return _pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(_to_bcrypt_bytes(plain), hashed.encode("utf-8"))
+    except ValueError:
+        # Malformed stored hash — treat as a failed login rather than a 500.
+        return False
 
 
 # ------------------------------------------------------------------ #

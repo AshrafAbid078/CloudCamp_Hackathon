@@ -251,9 +251,9 @@ def get_dispatch_plan(
             hours=hours,
             industrial_count=len(processes),
             battery_count=len(batteries),
-            cost_saved_usd=kpis.get("total_cost_saved_usd"),
-            co2_saved_kg=kpis.get("total_co2_saved_kg"),
-            peak_shaved_kw=kpis.get("total_peak_shaved_kw"),
+            cost_saved_usd=kpis.get("cost_saved_usd"),
+            co2_saved_kg=kpis.get("co2_saved_kg"),
+            peak_shaved_kw=kpis.get("peak_shaved_kw"),
             model_used=forecast_data["accuracy"].get("model"),
             triggered_by=current_user.username,
         )
