@@ -19,7 +19,7 @@ This document is the locked reference for the idea itself. The five technical bu
 **Shorter tagline (if a field needs it):** One engine. Any flexible load. Anywhere the sun and the grid don't quite agree.
 
 **Public summary paragraph:**
-Meridian Grid is an AI system that predicts when power will be cheap and clean — from solar output to grid carbon intensity — and automatically works out how to shift a facility's flexible energy use (industrial processes, battery storage, and eventually EV charging) into those windows. A built-in conversational copilot explains every recommendation in plain language, adapting its tone for a factory manager or a technical grid operator. Piloted live on industrial facilities in Bangladesh (garment manufacturing and cold storage — sectors with real grid unreliability and growing solar adoption), the system is architected from day one to generalize to any region and any flexible asset type, so the same engine can serve both individual facilities and the utilities that manage them.
+Meridian Grid is an AI system that predicts when power will be cheap and clean — from solar output to grid carbon intensity — and automatically works out how to shift a facility's flexible energy use (industrial processes, battery storage, and eventually EV charging) into those windows. A conversational copilot (in development) is designed to explain each recommendation in plain language, adapting its tone for a factory manager or a technical grid operator. Built for industrial facilities in Bangladesh (garment manufacturing and cold storage — sectors with real grid unreliability and growing solar adoption) and currently running on Bangladesh solar data and synthetic facilities, the system is architected from day one to generalize to any region and any flexible asset type, so the same engine can serve both individual facilities and the utilities that manage them.
 
 **Primary team language:** English (Bengali for in-person pitching/support as needed).
 
@@ -34,7 +34,7 @@ Meridian Grid addresses one problem from two sides of the same meter.
 - **Who:** Industrial facility managers — piloted on Bangladesh's RMG/garment and cold-storage sectors, generalizable to any market with unreliable grid supply and growing solar adoption.
 - **Problem today:** Facility managers make load-timing and battery-dispatch decisions on instinct or a fixed schedule. There is no tool that turns "solar output will spike at 1pm" or "the grid is under stress right now" into a specific, explained action for their actual equipment.
 - **Why existing solutions fail:** Building management/SCADA systems log data but don't forecast or recommend anything. Enterprise energy management platforms assume mature-grid data availability (consistent pricing feeds, dense sensor networks) that doesn't exist equally across data sources in a market like Bangladesh — so those tools either don't deploy there or deploy in a degraded, unconvincing form.
-- **Measurable outcome:** A double-digit percentage reduction in both energy cost and tCO2 emitted from the facility's flexible load and battery use, shown as a live number every session — not a quarterly report.
+- **Target outcome:** A double-digit percentage reduction in both energy cost and tCO2 emitted from the facility's flexible load and battery use, shown as a live number every session — not a quarterly report. (Target to validate; the current build reports modeled savings on synthetic facilities.)
 
 ### 2.2 In front of the meter — the grid/utility side (secondary, architecture + role-toggle demo)
 
@@ -53,9 +53,9 @@ Both problems are served by the same forecast → optimize → explain engine. T
 
 | Layer | What it does |
 |---|---|
-| **Forecasting** | Predicts solar output (6–24h, from irradiance + cloud-motion data) and grid stress/carbon intensity, with a confidence band and a stated backtested accuracy — not a black box |
-| **Optimization** | Schedules whichever flexible assets are registered (industrial processes, batteries, eventually EV fleets) to minimize a blended cost + emissions objective, respecting each asset's real constraints |
-| **Agent (Copilot)** | Explains every recommendation conversationally, answers "what if" questions by actually re-running the forecast/optimization (never inventing a number), and adapts its tone to whoever's asking |
+| **Forecasting** | Predicts solar output (6–24h, from irradiance + cloud-motion data) and grid stress/carbon intensity, with a confidence band and a stated backtested accuracy — not a black box (MVP: fixed ±15% band; carbon forecast is persistence-based) |
+| **Optimization** | Schedules whichever flexible assets are registered (industrial processes, batteries, eventually EV fleets) to minimize a blended cost + emissions objective, respecting each asset's real constraints (MVP inputs: TOU price + grid carbon; the solar forecast is not yet fed into the optimizer) |
+| **Agent (Copilot) — planned** | Explains every recommendation conversationally, answers "what if" questions by actually re-running the forecast/optimization (never inventing a number), and adapts its tone to whoever's asking |
 
 ### 3.2 Two pluggable axes — why this generalizes without needing to build everything
 
@@ -65,7 +65,7 @@ The engine is architected on two independent adapter axes, so it can visibly pro
 
 | Region | Status for this build | Data sources |
 |---|---|---|
-| South/Southeast Asia (Bangladesh) | **Live pilot** | NREL NSRDB (confirmed coverage: 67°E–98°E, 5°N–38°N) + NOAA GFS + Electricity Maps (Bangladesh zone — disclosed as a lower/estimated data tier) |
+| South/Southeast Asia (Bangladesh) | **Implemented** (Bangladesh data; synthetic facilities — no real-site pilot) | NREL NSRDB (confirmed coverage: 67°E–98°E, 5°N–38°N) + NOAA GFS + Electricity Maps (Bangladesh zone — disclosed as a lower/estimated data tier) |
 | Europe | Architecture-only (shown via diagram + interface stub) | NOAA GFS + Open Power System Data–style historical/weather series |
 | US (PJM territory) | Architecture-only (shown via diagram + interface stub) | NOAA GFS + PJM Data Miner–style real-time marginal pricing, which would enable live price arbitrage, not just scheduling |
 
@@ -146,12 +146,12 @@ Meridian Grid's edge: it's the only one of these that is agent-native end to end
 
 | Source | Type | Region | Role |
 |---|---|---|---|
-| NREL NSRDB | Public dataset | South/SE Asia (confirmed BD coverage) | Live — solar irradiance input to forecaster |
-| NOAA GFS | Public dataset | Global | Live — cloud-cover/atmospheric input to forecaster |
-| Electricity Maps API | Real-time API | Bangladesh zone | Live — grid CO2 intensity + power mix (disclosed as a lower/estimated data tier for BD) |
+| NREL NSRDB | Public dataset | South/SE Asia (confirmed BD coverage) | Historical cached data (2018–2020) — forecaster training and demo input |
+| NOAA GFS | Public dataset | Global | Historical cached sample (2020-01 to 2020-05) — cloud-cover features |
+| Electricity Maps API | Real-time API | Bangladesh zone | Live poll — grid CO2 intensity + power mix (disclosed as a lower/estimated data tier for BD; history just starting to accumulate) |
 | Open Power System Data | Public dataset | Europe only | Architecture reference only — not pulled as real data for this build |
 | PJM Data Miner | Public/registered API | US (PJM territory) only | Architecture reference only — not pulled as real data for this build |
-| Synthetic facility & battery data | Generated | N/A | Live — no real personal or facility data used anywhere |
+| Synthetic facility & battery data | Generated | N/A | Used for demo and tests — no real personal or facility data used anywhere |
 
 ---
 

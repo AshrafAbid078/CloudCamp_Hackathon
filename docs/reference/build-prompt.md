@@ -128,7 +128,7 @@ Constraints:
      cached NSRDB/GFS samples only.
 
 Acceptance criteria:
-   - `docker-compose up` launches backend on :8000, frontend on :3000.
+   - Backend runs locally on :8000 and frontend on :3000 (no Docker).
    - `GET /forecast/bd` returns solar + grid-stress forecast within
      200ms using cached sample data.
    - `GET /dispatch/plan` returns a schedule with KPI deltas broken out
@@ -149,7 +149,7 @@ Acceptance criteria:
 4. "Implement the dispatch/optimization agent using PuLP across the Industrial and Battery adapters. Expose `GET /dispatch/plan` with the schedule and per-asset-type KPI deltas vs. baseline. Add a unit test with an obvious optimal answer to sanity-check the objective function."
 5. "Implement the copilot agent with the four tools and the `role` parameter for dual explanation mode, wired to Ollama via the documented env vars. Expose `POST /copilot/chat`. Add a CLI test script that asks the same question in both roles and prints both replies side by side."
 6. "Build the Next.js dashboard: forecast chart, dispatch view, KPI cards, region-adapter indicator, asset-adapter indicator, role toggle, and chat panel wired to `/copilot/chat`. Make the role toggle's effect on the chat panel obviously visible."
-7. "Wire up docker-compose for backend + frontend + Ollama, add `.env.example`, and write a smoke-test script hitting all endpoints."
+7. "Add `.env.example`, simple local run scripts for backend + frontend (no Docker), and a smoke-test script hitting all endpoints."
 8. "Implement `run_whatif`: it should re-run forecast+dispatch under a perturbation (e.g. 'solar -30% tomorrow') and return a plain-language delta plus updated chart data, correctly styled for whichever role asked."
 
 ## Debugging handoff notes

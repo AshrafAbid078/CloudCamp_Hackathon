@@ -50,8 +50,8 @@
 ## 2. Components
 
 ### 2.1 Data ingestion (`backend/data_pipeline/`) [IMPLEMENTED]
-- **NSRDB loader** — solar irradiance/meteorological data, confirmed South/SE Asia coverage. Live for Bangladesh.
-- **NOAA GFS client** — cloud-cover/atmospheric data, feeds the cloud-motion features in the solar forecast. Global, usable for any region.
+- **NSRDB loader** — solar irradiance/meteorological data, confirmed South/SE Asia coverage. Cached historical dataset (2018–2020) for Bangladesh, used for model training and the demo forecast.
+- **NOAA GFS client** — cloud-cover/atmospheric data, feeds the cloud-motion features in the solar forecast. Global, usable for any region. The current cached sample covers 2020-01 to 2020-05 only; later rows are forward-filled.
 - **Electricity Maps client** — real-time BD-zone CO2 intensity + power mix. Live. Must cache last-good response and degrade gracefully on error or missing key; BD's data tier is disclosed as estimated/lower-confidence, not fully measured.
 - **Synthetic facility + battery generator** — flexible-process list (name, power draw, allowable shift window, deadline) and battery state (capacity, current SoC, charge/discharge rate). No real facility or personal data, seeded for reproducibility.
 - **RegionAdapter protocol** — `BDAdapter` implemented live; `EUAdapter` / `USAdapter` are classes that raise a clear `NotImplementedError` with a docstring describing exactly what they'd wire to (Open Power System Data–style for EU, PJM Data Miner–style for US). The stub exists in code, not only in a diagram — that's what makes the "generalizes" claim checkable.
@@ -61,6 +61,7 @@
 - **Grid-stress forecast:** simple short-horizon extrapolation of the Electricity Maps signal — kept deliberately simple, not oversold.
 - **Evaluation:** backtest against a held-out window, report MAPE/RMSE, surface on the dashboard as an explicit accuracy number.
 - **Interface:** `GET /forecast/{region}?horizon_hours=24` → solar forecast + grid-stress forecast + confidence band + accuracy.
+- **Current implementation notes:** the grid-stress forecast repeats the last known carbon value (persistence); the confidence band is a fixed ±15%; inference uses the last N rows of the cached feature table, so forecast timestamps follow the dataset's tail rather than the current time; live weather ingestion is planned.
 
 ### 2.3 Dispatch / optimization agent (`backend/dispatch/`) [IMPLEMENTED]
 - **AssetAdapter protocol** — `IndustrialProcessAdapter` and `BatteryAdapter` implemented live; `EVFleetAdapter` a documented stub, same NotImplementedError pattern as the region stubs.
@@ -68,6 +69,7 @@
 - **MVP algorithm:** linear program via PuLP, or a clearly-commented greedy fallback. **Not RL for the MVP** — RL is a stretch goal, only claim it if it's actually running.
 - **Output:** per-asset schedule + aggregate KPI deltas vs. a naive baseline, broken out by asset type (industrial vs. battery) so the dashboard can show each contribution separately.
 - **Interface:** `GET /dispatch/plan`.
+- **Current implementation notes:** inputs are TOU price (placeholder tariff) and the grid-carbon signal; the solar forecast is not yet an optimizer input; baseline is "start at earliest start"; assets are synthetic files loaded at start-up.
 
 ### 2.4 Copilot agent (`agent/`) [PLANNED / FUTURE]
 - Function-calling over four tools: `get_forecast`, `get_dispatch_plan`, `run_whatif(perturbation)`, `explain_decision(asset_id)`.
@@ -97,7 +99,7 @@
 
 ## 5. Deployment [PLANNED / FUTURE]
 
-Deployment with `docker-compose` (FastAPI, Next.js, and Ollama) is planned for a future phase once all components are built. Currently, services are run locally.
+This project does not use Docker (see `CONTRIBUTING.md`). Services run locally: FastAPI with uvicorn, and the frontend and Ollama as regular local processes once built.
 
 ## 6. Local model → task mapping
 

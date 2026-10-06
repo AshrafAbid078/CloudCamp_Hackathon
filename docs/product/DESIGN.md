@@ -4,13 +4,17 @@
 **Specific Ask:** Cost and emissions savings
 **Source of truth:** `MERIDIAN_GRID_IDEA.md` — if this doc and that one disagree, the idea doc wins; update this one.
 
+## Implementation status (current build)
+
+Implemented: data pipeline, solar forecast (LightGBM), persistence-based carbon signal, dispatch optimizer (PuLP) for industrial processes and batteries, JWT/RBAC, SQLite persistence, carbon poller. Planned: dashboard, copilot with role toggle, what-if simulation, EV fleet and EU/US adapters (stubs only). Known gaps: the optimizer currently uses TOU price and grid carbon but not the solar forecast; the carbon forecast is flat; the confidence band is a fixed ±15%. Sections below describe the intended design; see `README.md` for current limitations.
+
 ## 1. Problem statement (two sides of one meter)
 
 **Behind the meter — facility side (primary, live-demoed):**
 - Who: industrial facility managers, piloted on Bangladesh's RMG/garment and cold-storage sectors, generalizable to any market with unreliable grid + growing solar adoption.
 - Problem today: load-timing and battery-dispatch decisions are made on instinct or fixed schedule — no tool turns a solar/grid-stress signal into a specific, explained action for the facility's own equipment.
 - Why existing solutions fail: SCADA/BMS systems log but don't forecast or recommend; enterprise EMS platforms assume mature-grid data availability that doesn't exist equally across sources in Bangladesh.
-- Measurable outcome: double-digit % reduction in cost and tCO2 for the facility's flexible load + battery use, shown live per session.
+- Target outcome: a double-digit % reduction in cost and tCO2 for the facility's flexible load + battery use. This is a target to validate; the current build reports modeled savings on synthetic facilities against a start-at-earliest-time baseline.
 
 **In front of the meter — grid side (secondary, architecture + role-toggle demo only):**
 - Who: utility DR program managers / VPP aggregators.

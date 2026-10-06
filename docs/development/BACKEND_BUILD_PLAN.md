@@ -59,6 +59,8 @@
 - [x] Build the grid-stress forecast as a simple short-horizon extrapolation of the Electricity Maps signal — deliberately kept simple, not oversold.
 - [x] Expose `GET /forecast/{region}?horizon_hours=24` returning solar forecast + grid-stress forecast + confidence band + accuracy number.
 
+**Known limitations (current build):** the grid-stress forecast is persistence (flat); the confidence band is a fixed ±15%; the held-out test set is small (771 rows) and MAPE is worse than persistence (RMSE is better); inference uses the last rows of the cached feature table, so timestamps follow the dataset's tail rather than the current time.
+
 **Verify before moving on:** Does the backtest number reflect a real held-out period, not just training-set accuracy? Does the forecast look sane on a plotted chart (day/night solar cycle visible)?
 
 ---
@@ -74,6 +76,8 @@
 - [x] Implement the MVP solver with PuLP (linear program) — not RL, that's stretch-only.
 - [x] Hand-build one small test case with an obvious optimal answer, and verify the solver's output matches it by hand before trusting it on real data.
 - [x] Expose `GET /dispatch/plan` returning the schedule + KPI deltas (cost saved, tCO2 saved, peak kW shaved), broken out per asset type.
+
+**Known limitations (current build):** the optimizer receives TOU price and the grid-carbon signal only — the solar forecast is not yet an input; with a flat carbon signal it mainly optimizes cost; baseline is "start at earliest start"; assets and tariff are synthetic/placeholder files.
 
 **Verify before moving on:** Does the dispatch plan respect every constraint (no process scheduled past its deadline, battery never exceeds capacity/rate)? Do the KPI deltas make sense relative to the baseline?
 

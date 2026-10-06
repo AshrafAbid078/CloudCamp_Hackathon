@@ -1,6 +1,6 @@
 # Meridian_Grid — AI/ML + Dataset Usage Roadmap
 
-> **Implementation Status**: The core forecasting models (LightGBM) and data pipelines (NSRDB, GFS, Electricity Maps) described here are **[IMPLEMENTED]** in `backend/forecasting/` and `backend/data_pipeline/`. Deep Learning stretch goals remain **[PLANNED / FUTURE]**.This document combines the AI/ML roadmap with a practical map of **which dataset, which columns/features, and which project component uses them**.
+> **Implementation Status**: The core forecasting models (LightGBM) and data pipelines (NSRDB, GFS, Electricity Maps) described here are **[IMPLEMENTED]** in `backend/forecasting/` and `backend/data_pipeline/`. Deep Learning stretch goals remain **[PLANNED / FUTURE]**. The implemented forecast runs on cached historical data; live weather ingestion and statistical prediction intervals are not built yet.This document combines the AI/ML roadmap with a practical map of **which dataset, which columns/features, and which project component uses them**.
 
 The project pipeline is:
 
