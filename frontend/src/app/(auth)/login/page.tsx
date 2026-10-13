@@ -1,56 +1,71 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Zap, ArrowRight, Lock, User, AlertCircle, Info } from 'lucide-react';
+import { motion } from 'framer-motion';
+import {
+  Zap,
+  ArrowRight,
+  Lock,
+  User,
+  AlertCircle,
+  Info,
+  Server,
+  UserPlus,
+} from 'lucide-react';
 import { Button, Input } from '@/components/common';
+import { useAuthStore } from '@/lib/store';
 import { useRole } from '@/hooks';
 import type { UserRole } from '@/lib/types/auth';
 
 export default function LoginPage() {
   const router = useRouter();
   const { role, setRole } = useRole();
-  const [username, setUsername] = useState('admin@meridiangrid.energy');
-  const [password, setPassword] = useState('••••••••••••');
-  const [isLoading, setIsLoading] = useState(false);
+  const { login, isLoading, error, clearError, checkBackendStatus, backendOnline } = useAuthStore();
+
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('admin123');
   const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkBackendStatus();
+    clearError();
+  }, [checkBackendStatus, clearError]);
 
   const handleRoleToggle = (selectedRole: UserRole) => {
     setRole(selectedRole);
     if (selectedRole === 'facility_manager') {
       setUsername('manager@chittagong-textile.bd');
+      setPassword('facility2026!');
     } else {
       setUsername('operator@bpdb-national-grid.bd');
+      setPassword('gridop2026!');
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleSelectAdmin = () => {
+    setUsername('admin');
+    setPassword('admin123');
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setAuthError(null);
 
-    // Simulated JWT Auth exchange
-    setTimeout(() => {
-      try {
-        const mockJwt = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.meridian.${role}.${Date.now()}`;
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('meridian_token', mockJwt);
-          localStorage.setItem('meridian_role', role);
-        }
-        setIsLoading(false);
-        router.push('/dashboard');
-      } catch {
-        setIsLoading(false);
-        setAuthError('Authentication failed. Please verify credentials.');
-      }
-    }, 500);
+    const success = await login(username, password);
+    if (success) {
+      router.push('/dashboard');
+    } else {
+      setAuthError('Authentication failed. Please check credentials or backend status.');
+    }
   };
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center bg-[var(--bg-base)] p-6 relative overflow-hidden text-[var(--text-primary)]">
       {/* Background Matrix & Twilight Glow */}
-      <div className="absolute inset-0 pointer-events-none opacity-20"
+      <div
+        className="absolute inset-0 pointer-events-none opacity-20"
         style={{
           backgroundImage: `linear-gradient(to right, var(--border-hairline) 1px, transparent 1px), linear-gradient(to bottom, var(--border-hairline) 1px, transparent 1px)`,
           backgroundSize: '40px 40px',
@@ -60,7 +75,12 @@ export default function LoginPage() {
       <div className="absolute bottom-1/4 left-1/3 w-[400px] h-[400px] bg-[var(--accent-clean)]/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Login Card */}
-      <div className="w-full max-w-md p-8 sm:p-10 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-2xl relative z-10 backdrop-blur-2xl space-y-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="w-full max-w-md p-8 sm:p-10 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-2xl relative z-10 backdrop-blur-2xl space-y-6"
+      >
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[var(--accent-solar)] via-[var(--accent-clean)] to-[var(--bg-surface-raised)] p-0.5 shadow-lg shadow-[var(--accent-solar)]/25 mb-3">
@@ -74,6 +94,32 @@ export default function LoginPage() {
           <p className="text-xs text-[var(--text-muted)] mt-1 max-w-xs">
             Universal flexible-load forecasting & dispatch optimization engine
           </p>
+        </div>
+
+        {/* Backend Status Feedback */}
+        <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)] text-xs">
+          <div className="flex items-center gap-2">
+            <Server className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+            <span className="text-[var(--text-muted)]">Backend Service:</span>
+            {backendOnline ? (
+              <span className="font-semibold text-[var(--accent-clean)] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-clean)] animate-pulse" />
+                FastAPI Port 8000 Online
+              </span>
+            ) : (
+              <span className="font-semibold text-[var(--accent-solar)] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-solar)]" />
+                Standalone Prototype Mode
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleSelectAdmin}
+            className="text-[10px] font-mono text-[var(--accent-solar)] hover:underline cursor-pointer"
+          >
+            Fill Seed Admin
+          </button>
         </div>
 
         {/* Persona Pre-Selection Toggle */}
@@ -124,14 +170,14 @@ export default function LoginPage() {
         <div className="p-3 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)] text-xs text-[var(--text-muted)] flex items-start gap-2.5">
           <Info className="w-4 h-4 text-[var(--accent-solar)] shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong className="text-[var(--text-primary)]">First-Boot Notice:</strong> The seeded admin account credentials are pre-filled below. Password must be changed upon first production sign-in.
+            <strong className="text-[var(--text-primary)]">First-Boot Notice:</strong> Seeded admin account (`admin` / `admin123`) is ready. Connects to backend FastAPI JWT `/auth/login`.
           </p>
         </div>
 
-        {authError && (
+        {(authError || error) && (
           <div className="p-3 rounded-xl bg-[var(--accent-stress)]/15 border border-[var(--accent-stress)]/30 text-xs text-[var(--accent-stress)] flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{authError}</span>
+            <span>{authError || error}</span>
           </div>
         )}
 
@@ -167,12 +213,18 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="text-center text-xs text-[var(--text-muted)] pt-2 border-t border-[var(--border-hairline)]">
-          <Link href="/about" className="hover:text-[var(--accent-solar)] transition-colors">
-            Read ClimaTech Architecture & Business Model →
+        {/* Bidirectional Link to Sign Up */}
+        <div className="text-center text-xs text-[var(--text-muted)] pt-3 border-t border-[var(--border-hairline)] flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>Need a new account?</span>
+          <Link
+            href="/signup"
+            className="text-[var(--accent-solar)] hover:underline font-bold transition-colors flex items-center gap-1"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Sign Up for Meridian →</span>
           </Link>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

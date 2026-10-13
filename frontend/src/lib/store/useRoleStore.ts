@@ -28,6 +28,18 @@ export const ROLE_DEFINITIONS: Record<UserRole, RolePermission> = {
     canExportData: true,
     canRunWhatIf: true,
   },
+  admin: {
+    role: 'admin',
+    displayName: 'System Administrator',
+    tagline: 'Platform Infrastructure & User Access',
+    badgeEmoji: '🛡️',
+    description: 'System administrator with full access to user management, database telemetry, optimization parameters, and regional feeder nodes.',
+    perspective: 'action-first',
+    canOverrideDispatch: true,
+    canEditSettings: true,
+    canExportData: true,
+    canRunWhatIf: true,
+  },
 };
 
 export interface AdapterStatus {

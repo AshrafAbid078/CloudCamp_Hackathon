@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ArrowUpRight, ArrowDownRight, HelpCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 export interface KpiCardProps {
@@ -14,6 +15,7 @@ export interface KpiCardProps {
   variant?: 'solar' | 'clean' | 'stress' | 'neutral' | 'amber' | 'emerald' | 'sky' | 'violet';
   tooltip?: string;
   baselineComparison?: string;
+  className?: string;
 }
 
 export function KpiCard({
@@ -26,6 +28,7 @@ export function KpiCard({
   variant = 'clean',
   tooltip,
   baselineComparison,
+  className,
 }: KpiCardProps) {
   const isPositive = (changePercent ?? 0) >= 0;
 
@@ -52,10 +55,12 @@ export function KpiCard({
   };
 
   return (
-    <div
+    <motion.div
+      whileHover={{ y: -3, transition: { duration: 0.2 } }}
       className={cn(
-        'p-5 sm:p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md flex flex-col justify-between transition-all hover:bg-[var(--bg-surface-raised)]/70',
-        accentBorders[variant] || accentBorders.clean
+        'p-5 sm:p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md flex flex-col justify-between transition-colors hover:bg-[var(--bg-surface-raised)]/70',
+        accentBorders[variant] || accentBorders.clean,
+        className
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -109,6 +114,6 @@ export function KpiCard({
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -137,7 +137,7 @@ def root():
         "message": "Meridian Grid API is running.",
         "docs": "/docs",
         "endpoints": {
-            "auth": ["POST /auth/login", "GET /auth/me", "PUT /auth/me/password"],
+            "auth": ["POST /auth/login", "POST /auth/signup", "GET /auth/me", "PUT /auth/me/password"],
             "forecast": ["GET /forecast/{region}?horizon_hours=24"],
             "dispatch": ["GET /dispatch/plan?hours=24", "GET /dispatch/history"],
             "admin": ["POST /auth/register", "GET /auth/users", "DELETE /auth/users/{id}"],

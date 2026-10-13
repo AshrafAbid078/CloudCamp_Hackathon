@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { motion, type Variants } from 'framer-motion';
 import {
   Sun,
   BarChart3,
@@ -14,6 +15,26 @@ import { forecastApi } from '@/lib/api';
 import type { SolarDataPoint, ForecastSummaryMetrics, ForecastHorizon } from '@/lib/types';
 import { formatGhi } from '@/lib/utils';
 import { useRoleStore } from '@/lib/store/useRoleStore';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.45, ease: 'easeOut' },
+  },
+};
 
 export default function ForecastDetailPage() {
   const { forecastHorizon, setForecastHorizon, activeModel, setActiveModel } = useRoleStore();
@@ -45,9 +66,14 @@ export default function ForecastDetailPage() {
   }, [forecastHorizon]);
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6"
+    >
       {/* Page Header with Region, Target & Horizon Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[var(--border-hairline)]">
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[var(--border-hairline)]">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)] font-heading flex items-center gap-2">
@@ -81,10 +107,10 @@ export default function ForecastDetailPage() {
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Model Indicator & Data Confidence Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Model Indicator Card */}
         <div className="p-5 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -145,25 +171,27 @@ export default function ForecastDetailPage() {
             Last Poll:<br /><span className="text-[var(--accent-clean)]">14:25 BST</span>
           </span>
         </div>
-      </div>
+      </motion.div>
 
       {/* GHI Hero Chart with Toggle Overlays (DNI, DHI, Clearsky) */}
-      {isLoading ? (
-        <div className="h-[420px] rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] flex items-center justify-center text-xs text-[var(--text-muted)] font-mono animate-pulse">
-          Computing atmospheric radiative transfer equations...
-        </div>
-      ) : (
-        <ForecastChart
-          data={solarData}
-          title={`Surface Solar Irradiance Curve & Cloud Attenuation (${forecastHorizon.toUpperCase()} Horizon)`}
-          subtitle="Turn on optional DNI, DHI, or Clearsky overlay lines below to inspect atmospheric partitioning."
-          showGridStress={true}
-          showOverlaysToggle={true}
-        />
-      )}
+      <motion.div variants={itemVariants}>
+        {isLoading ? (
+          <div className="h-[420px] rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] flex items-center justify-center text-xs text-[var(--text-muted)] font-mono animate-pulse">
+            Computing atmospheric radiative transfer equations...
+          </div>
+        ) : (
+          <ForecastChart
+            data={solarData}
+            title={`Surface Solar Irradiance Curve & Cloud Attenuation (${forecastHorizon.toUpperCase()} Horizon)`}
+            subtitle="Turn on optional DNI, DHI, or Clearsky overlay lines below to inspect atmospheric partitioning."
+            showGridStress={true}
+            showOverlaysToggle={true}
+          />
+        )}
+      </motion.div>
 
       {/* Backtested Accuracy Breakdown Grid */}
-      <div className="space-y-3">
+      <motion.div variants={itemVariants} className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-[var(--accent-solar)]" />
@@ -178,9 +206,10 @@ export default function ForecastDetailPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {summary?.benchmarks.map((b) => (
-            <div
+            <motion.div
               key={b.metric}
-              className="p-5 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md space-y-3"
+              whileHover={{ y: -3, transition: { duration: 0.2 } }}
+              className="p-5 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md space-y-3 transition-colors hover:bg-[var(--bg-surface-raised)]/70"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)] uppercase font-mono tracking-wider">
                 {b.metric}
@@ -213,13 +242,13 @@ export default function ForecastDetailPage() {
                   +{b.improvementPercent}% more accurate
                 </span>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
-      </div>
+      </motion.div>
 
       {/* Side-by-Side Raw Data Table Linking to Data Sources */}
-      <div className="p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-lg space-y-4">
+      <motion.div variants={itemVariants} className="p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-lg space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-hairline)] pb-4">
           <div>
             <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] font-heading">
@@ -316,7 +345,7 @@ export default function ForecastDetailPage() {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

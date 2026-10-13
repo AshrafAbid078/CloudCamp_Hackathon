@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
+import { motion, type Variants } from 'framer-motion';
 import {
   Bot,
   Send,
@@ -11,6 +12,26 @@ import {
 } from 'lucide-react';
 import { Button, Chip } from '@/components/common';
 import { useCopilot, useRole } from '@/hooks';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.45, ease: 'easeOut' },
+  },
+};
 
 const PRESET_QUERIES = [
   {
@@ -38,8 +59,8 @@ const PRESET_QUERIES = [
 export default function CopilotChatInterfacePage() {
   const { messages, isLoading, sendMessage, clearMessages } = useCopilot();
   const { isFacilityManager, toggleRole } = useRole();
-  const [inputVal, setInputVal] = useState('');
-  const [whatIfSliderVal, setWhatIfSliderVal] = useState(30);
+  const [inputVal, setInputVal] = React.useState('');
+  const [whatIfSliderVal, setWhatIfSliderVal] = React.useState(30);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -59,9 +80,14 @@ export default function CopilotChatInterfacePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6"
+    >
       {/* Role Tone Demonstration Banner */}
-      <div className="p-4 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <motion.div variants={itemVariants} className="p-4 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-2xl bg-[var(--accent-solar)]/15 text-[var(--accent-solar)] shrink-0">
             <Sparkles className="w-5 h-5" />
@@ -87,10 +113,10 @@ export default function CopilotChatInterfacePage() {
         >
           Flip Persona Tone ⇄
         </button>
-      </div>
+      </motion.div>
 
       {/* Main Chat Interface Container */}
-      <div className="h-[680px] flex flex-col rounded-3xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] shadow-xl overflow-hidden">
+      <motion.div variants={itemVariants} className="h-[680px] flex flex-col rounded-3xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] shadow-xl overflow-hidden">
         {/* Chat Header */}
         <div className="px-6 py-4 border-b border-[var(--border-hairline)] bg-[var(--bg-surface-raised)] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -131,14 +157,16 @@ export default function CopilotChatInterfacePage() {
               Suggested Prompts:
             </span>
             {PRESET_QUERIES.map((p) => (
-              <button
+              <motion.button
                 key={p.title}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => sendMessage(p.prompt)}
                 disabled={isLoading}
                 className="px-3 py-1 rounded-full bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] hover:border-[var(--accent-solar)] text-[11px] shrink-0 transition-all cursor-pointer shadow-xs"
               >
                 {p.title}
-              </button>
+              </motion.button>
             ))}
           </div>
 
@@ -171,8 +199,11 @@ export default function CopilotChatInterfacePage() {
             const isUser = msg.sender === 'user';
 
             return (
-              <div
+              <motion.div
                 key={msg.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
                 className={`flex gap-3 max-w-3xl ${isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}
               >
                 <div
@@ -248,7 +279,7 @@ export default function CopilotChatInterfacePage() {
                     {msg.timestamp}
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
 
@@ -291,7 +322,7 @@ export default function CopilotChatInterfacePage() {
             Query Agent
           </Button>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

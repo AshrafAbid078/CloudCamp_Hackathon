@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Sidebar, Header } from '@/components/layout';
 import { useCopilot, useRole } from '@/hooks';
 import { X, Send, Bot, Sparkles } from 'lucide-react';
@@ -36,8 +37,15 @@ export default function DashboardLayout({
       </div>
 
       {/* Slide-over Copilot Drawer (Accessible from any dashboard page) */}
-      {isOpen && (
-        <aside className="w-96 shrink-0 h-screen border-l border-[var(--border-hairline)] bg-[var(--bg-surface)] shadow-2xl flex flex-col z-40 transition-all">
+      <AnimatePresence>
+        {isOpen && (
+          <motion.aside
+            initial={{ x: '100%', opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: '100%', opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+            className="w-96 shrink-0 h-screen border-l border-[var(--border-hairline)] bg-[var(--bg-surface)] shadow-2xl flex flex-col z-40"
+          >
           {/* Drawer Header */}
           <div className="p-4 border-b border-[var(--border-hairline)] flex items-center justify-between bg-[var(--bg-surface-raised)]">
             <div className="flex items-center gap-2.5">
@@ -126,8 +134,9 @@ export default function DashboardLayout({
               <Send className="w-3.5 h-3.5" />
             </Button>
           </form>
-        </aside>
+        </motion.aside>
       )}
-    </div>
+    </AnimatePresence>
+  </div>
   );
 }

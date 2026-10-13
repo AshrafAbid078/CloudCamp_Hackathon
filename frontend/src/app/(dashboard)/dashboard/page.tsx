@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import {
   Zap,
   BatteryCharging,
@@ -24,6 +25,26 @@ import type {
 } from '@/lib/types';
 import { useCopilot, useRole } from '@/hooks';
 import { useRoleStore } from '@/lib/store/useRoleStore';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.45, ease: 'easeOut' },
+  },
+};
 
 export default function DashboardOverviewPage() {
   const { isFacilityManager } = useRole();
@@ -66,10 +87,20 @@ export default function DashboardOverviewPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6"
+    >
       {/* Graceful Degradation / Live Telemetry Banner */}
-      {isCachedBannerOpen && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)] text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+      <AnimatePresence>
+        {isCachedBannerOpen && (
+          <motion.div
+            variants={itemVariants}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            className="p-3.5 sm:p-4 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)] text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
+          >
           <div className="flex items-start sm:items-center gap-2.5">
             <div className="p-1.5 rounded-lg bg-[var(--accent-solar)]/15 text-[var(--accent-solar)] shrink-0 mt-0.5 sm:mt-0">
               <Info className="w-4 h-4" />
@@ -94,11 +125,15 @@ export default function DashboardOverviewPage() {
               Dismiss
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Hero Welcome & Horizon Control */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[var(--bg-surface)] via-[var(--bg-surface-raised)] to-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-xl relative overflow-hidden">
+      <motion.div
+        variants={itemVariants}
+        className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[var(--bg-surface)] via-[var(--bg-surface-raised)] to-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-xl relative overflow-hidden"
+      >
         <div className="absolute right-0 top-0 w-96 h-full bg-radial from-[var(--accent-solar)]/10 to-transparent pointer-events-none" />
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
@@ -148,10 +183,10 @@ export default function DashboardOverviewPage() {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Dominant KPI Cards (Compared Against Unoptimized Baseline) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard
           title="Cost Saved Today ($)"
           value={kpis ? `$${kpis.totalCostSavedUsd.toLocaleString()}` : '$2,840'}
@@ -184,10 +219,10 @@ export default function DashboardOverviewPage() {
           baselineComparison={kpis ? `${kpis.unoptimizedPeakKw} kW uncoordinated spike` : '1,180 kW coincident peak'}
           tooltip="Prevents facility from breaching 1,000 kW maximum demand threshold"
         />
-      </div>
+      </motion.div>
 
       {/* Main Center Area: Solar + Grid-Stress Chart & Right Sidebar Dispatch Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Center Hero: Forecast Chart (2 Cols) */}
         <div className="lg:col-span-2 space-y-6">
           {isLoading ? (
@@ -309,7 +344,7 @@ export default function DashboardOverviewPage() {
             </Link>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -1,4 +1,4 @@
-export type UserRole = 'facility_manager' | 'grid_operator';
+export type UserRole = 'facility_manager' | 'grid_operator' | 'admin';
 
 export interface User {
   id: string;
@@ -15,6 +15,23 @@ export interface AuthSession {
   isAuthenticated: boolean;
   token?: string;
   mustChangePassword?: boolean;
+}
+
+export interface SignupRequest {
+  fullName: string;
+  username: string;
+  email?: string;
+  password: string;
+  role: UserRole;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  expires_in_minutes: number;
+  role: UserRole;
+  must_change_password: boolean;
+  user?: User;
 }
 
 export interface RolePermission {

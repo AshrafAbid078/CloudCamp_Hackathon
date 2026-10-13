@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import {
   Zap,
   BatteryCharging,
@@ -20,6 +21,26 @@ import type {
   OptimizationRunHistory,
 } from '@/lib/types';
 import { useRole } from '@/hooks';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.45, ease: 'easeOut' },
+  },
+};
 
 export default function DispatchPlanPage() {
   const { isGridOperator } = useRole();
@@ -85,9 +106,14 @@ export default function DispatchPlanPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6"
+    >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[var(--border-hairline)]">
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[var(--border-hairline)]">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)] font-heading flex items-center gap-2">
@@ -114,24 +140,34 @@ export default function DispatchPlanPage() {
             Re-solve Optimization
           </Button>
         </div>
-      </div>
+      </motion.div>
 
-      {notification && (
-        <div className="p-4 rounded-2xl bg-[var(--accent-clean)]/15 border border-[var(--accent-clean)]/30 text-xs text-[var(--accent-clean)] flex items-center gap-2 shadow-md">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{notification}</span>
-        </div>
-      )}
+      <AnimatePresence>
+        {notification && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="p-4 rounded-2xl bg-[var(--accent-clean)]/15 border border-[var(--accent-clean)]/30 text-xs text-[var(--accent-clean)] flex items-center gap-2 shadow-md"
+          >
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{notification}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Per-Asset KPI Deltas Broken Out Per Track */}
-      <div className="space-y-3">
+      <motion.div variants={itemVariants} className="space-y-3">
         <div className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">
           Per-Track Operational Contribution Deltas
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Industrial Batch Processes Track KPI */}
-          <div className="p-5 sm:p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md space-y-3">
+          <motion.div
+            whileHover={{ y: -3, transition: { duration: 0.2 } }}
+            className="p-5 sm:p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md space-y-3 transition-colors hover:bg-[var(--bg-surface-raised)]/70"
+          >
             <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-3">
               <div className="flex items-center gap-2">
                 <Factory className="w-4 h-4 text-[var(--accent-solar)]" />
@@ -169,10 +205,13 @@ export default function DispatchPlanPage() {
                 <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">Coincident load</span>
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Battery Storage Track KPI */}
-          <div className="p-5 sm:p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md space-y-3">
+          <motion.div
+            whileHover={{ y: -3, transition: { duration: 0.2 } }}
+            className="p-5 sm:p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md space-y-3 transition-colors hover:bg-[var(--bg-surface-raised)]/70"
+          >
             <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-3">
               <div className="flex items-center gap-2">
                 <BatteryCharging className="w-4 h-4 text-[var(--accent-clean)]" />
@@ -210,18 +249,20 @@ export default function DispatchPlanPage() {
                 <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">Evening injection</span>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Main Interactive Multi-Track Gantt Timeline */}
       {batteryTrack && evFleetStub && (
-        <DispatchGantt
-          industrialTracks={industrialTracks}
-          batteryTrack={batteryTrack}
-          evFleetStub={evFleetStub}
-          onSelectSlot={handleOpenOverride}
-        />
+        <motion.div variants={itemVariants}>
+          <DispatchGantt
+            industrialTracks={industrialTracks}
+            batteryTrack={batteryTrack}
+            evFleetStub={evFleetStub}
+            onSelectSlot={handleOpenOverride}
+          />
+        </motion.div>
       )}
 
       {/* Override Dialog / Modal */}
@@ -235,7 +276,7 @@ export default function DispatchPlanPage() {
       />
 
       {/* History View & Trend Chart: Past optimization runs & KPI trends */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-lg space-y-4">
+      <motion.div variants={itemVariants} className="p-6 sm:p-8 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-lg space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-hairline)] pb-4">
           <div className="flex items-center gap-2">
             <History className="w-5 h-5 text-[var(--accent-clean)]" />
@@ -289,7 +330,7 @@ export default function DispatchPlanPage() {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

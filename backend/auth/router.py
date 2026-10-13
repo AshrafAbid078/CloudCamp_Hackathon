@@ -199,3 +199,49 @@ def deactivate_user(
     user.is_active = False
     db.commit()
     return {"detail": f"User '{user.username}' has been deactivated."}
+
+
+# ------------------------------------------------------------------ #
+# POST /auth/signup (public registration)                            #
+# ------------------------------------------------------------------ #
+
+@router.post(
+    "/signup",
+    response_model=Token,
+    status_code=status.HTTP_201_CREATED,
+    summary="Public user signup",
+)
+def signup(
+    body: UserCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Public registration endpoint for new facility managers and grid operators.
+    Returns signed JWT access token upon successful creation.
+    """
+    existing = db.query(User).filter(User.username == body.username).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Username '{body.username}' is already taken.",
+        )
+
+    user = User(
+        username=body.username,
+        hashed_password=hash_password(body.password),
+        role=body.role,
+        must_change_password=False,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token({"sub": user.username, "role": user.role.value})
+    return Token(
+        access_token=token,
+        token_type="bearer",
+        expires_in_minutes=settings.access_token_expire_minutes,
+        role=user.role,
+        must_change_password=user.must_change_password,
+    )
