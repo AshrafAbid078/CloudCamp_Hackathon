@@ -3,15 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   Database,
-  ShieldCheck,
-  Hash,
-  Clock,
-  ArrowRight,
-  CheckCircle,
-  FileText,
   Search,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
-import { Chip, Input } from '@/components/common';
+import { Input, Chip } from '@/components/common';
 import { systemApi } from '@/lib/api';
 import type { DataProvenanceRecord } from '@/lib/types';
 
@@ -21,15 +17,20 @@ export default function DataProvenancePage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
+    let isMounted = true;
+    async function loadData() {
+      setIsLoading(true);
       try {
         const data = await systemApi.getDataProvenance();
-        setRecords(data);
+        if (isMounted) setRecords(data);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     }
-    load();
+    loadData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const filteredRecords = records.filter(
@@ -41,90 +42,105 @@ export default function DataProvenancePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[var(--border-hairline)]">
         <div>
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-            <Database className="w-5 h-5 text-sky-500" />
-            <span>Data Lineage & SCADA Provenance Ledger</span>
-          </h2>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Tamper-evident audit trail verifying calibration, ingestion timestamps, and quality scoring for all sensor inputs.
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)] font-heading flex items-center gap-2">
+              <Database className="w-6 h-6 text-[var(--accent-solar)]" />
+              <span>Data Lineage, Provenance & Synthetic Disclosures</span>
+            </h2>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            End-to-end cryptographic audit trail verifying meteorological inputs, electricity market tariffs, and sensor calibration.
           </p>
         </div>
 
-        <Chip variant="success" size="sm" dot>
-          Cryptographic Signatures Verified
+        <Chip variant="clean" size="sm" dot>
+          Cryptographic Integrity Verified
         </Chip>
       </div>
 
-      {/* Visual Pipeline Flow */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-sky-950 to-slate-900 text-white border border-slate-800 shadow-md">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-4">
-          End-to-End Solar Telemetry Ingestion Pipeline
-        </h3>
+      {/* Synthetic Data Disclosure Card */}
+      <div className="p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-lg space-y-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-[var(--accent-solar)] uppercase tracking-wider font-mono">
+          <AlertCircle className="w-4 h-4" />
+          <span>Synthetic Telemetry Disclosure & Calibration Methodology</span>
+        </div>
+        <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+          While weather and solar irradiance are ingested from real physical feeds (<strong className="text-[var(--text-primary)]">NREL NSRDB</strong> 10-year historical satellite irradiance and <strong className="text-[var(--text-primary)]">NOAA GFS</strong> atmospheric grids), the industrial facility machine load profiles (Textile Dye-Vat #2, Steel Arc Pre-Heater) utilize <strong className="text-[var(--text-primary)]">synthetic load curves</strong>. These curves are mathematically calibrated against empirical operational constraints from verified Bangladesh garment factories and steel mills in Gazipur and the Chittagong Export Processing Zone (CEPZ).
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-            <div className="text-[10px] font-bold text-sky-400 uppercase tracking-widest mb-1">
-              Stage 1
-            </div>
-            <div className="text-sm font-bold">Raw Telemetry Ingestion</div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              GOES-16 0.64µm GeoTIFF tiles & Modbus RS-485 pyranometer streams.
-            </p>
+      {/* Visual Pipeline Flow Stages */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-5 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] space-y-2">
+          <div className="text-[10px] font-bold font-mono text-[var(--accent-solar)] uppercase tracking-wider">
+            Stage 1: Raw Ingestion
           </div>
+          <div className="text-sm font-bold text-[var(--text-primary)] font-heading">
+            Physical Ingestion
+          </div>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            NOAA GFS GRIB2 atmospheric forecast files & Electricity Maps zone API.
+          </p>
+        </div>
 
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-            <div className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-1">
-              Stage 2
-            </div>
-            <div className="text-sm font-bold">Quality Control & Physics Checks</div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Extraterrestrial solar constant validation and outlier sensor rejection.
-            </p>
+        <div className="p-5 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] space-y-2">
+          <div className="text-[10px] font-bold font-mono text-[var(--accent-clean)] uppercase tracking-wider">
+            Stage 2: Quality Control
           </div>
+          <div className="text-sm font-bold text-[var(--text-primary)] font-heading">
+            Physics Checks
+          </div>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            Extraterrestrial solar constant bounds validation and missing interval interpolation.
+          </p>
+        </div>
 
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-            <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
-              Stage 3
-            </div>
-            <div className="text-sm font-bold">Feature Store & Vectorization</div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Farneback optical flow velocity calculation and solar zenith angle projection.
-            </p>
+        <div className="p-5 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] space-y-2">
+          <div className="text-[10px] font-bold font-mono text-[var(--accent-solar)] uppercase tracking-wider">
+            Stage 3: Feature Store
           </div>
+          <div className="text-sm font-bold text-[var(--text-primary)] font-heading">
+            Coupled Vectorization
+          </div>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            Solar zenith angle, air mass coefficients, and Bangladesh TOU tariff tiers.
+          </p>
+        </div>
 
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-            <div className="text-[10px] font-bold text-violet-400 uppercase tracking-widest mb-1">
-              Stage 4
-            </div>
-            <div className="text-sm font-bold">Inference & MILP Dispatch</div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              24-hour GHI probabilistics feeding the storage optimization solver.
-            </p>
+        <div className="p-5 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] space-y-2">
+          <div className="text-[10px] font-bold font-mono text-[var(--accent-clean)] uppercase tracking-wider">
+            Stage 4: Inference Ready
           </div>
+          <div className="text-sm font-bold text-[var(--text-primary)] font-heading">
+            MILP Optimization
+          </div>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            LightGBM GHI probabilistic distribution feeding the universal solver.
+          </p>
         </div>
       </div>
 
-      {/* Filter and Ledger Table */}
-      <div className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-100 dark:border-zinc-800 mb-4">
+      {/* Complete Data Source Lineage Table */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-lg space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-hairline)] pb-4">
           <div>
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Sensor & Feed Provenance Records
+            <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] font-heading">
+              Complete Data Source Inventory & Cryptographic Ledger
             </h3>
-            <p className="text-xs text-zinc-500">
-              Detailed tracking records with SHA-256 signatures and data quality scores.
+            <p className="text-xs text-[var(--text-muted)]">
+              Auditable records showing spatial resolution, temporal frequency, record count, and SHA-256 signatures.
             </p>
           </div>
 
           <div className="w-full sm:w-64">
             <Input
-              placeholder="Search source or type..."
+              placeholder="Filter by source or type..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              leftIcon={<Search className="w-4 h-4 text-zinc-400" />}
+              leftIcon={<Search className="w-4 h-4 text-[var(--text-muted)]" />}
             />
           </div>
         </div>
@@ -132,54 +148,60 @@ export default function DataProvenancePage() {
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-400 font-semibold uppercase">
-                <th className="py-2.5 px-3">Data Stream Source</th>
-                <th className="py-2.5 px-3">Telemetry Type</th>
-                <th className="py-2.5 px-3">Pipeline Stage</th>
-                <th className="py-2.5 px-3">Quality Score</th>
-                <th className="py-2.5 px-3">Cryptographic Hash</th>
-                <th className="py-2.5 px-3">Record Count</th>
-                <th className="py-2.5 px-3">Timestamp</th>
+              <tr className="border-b border-[var(--border-hairline)] text-[var(--text-muted)] font-mono uppercase text-[11px]">
+                <th className="py-3 px-3">Data Stream Source</th>
+                <th className="py-3 px-3">Telemetry Type</th>
+                <th className="py-3 px-3">Spatial / Temporal Res</th>
+                <th className="py-3 px-3">Stage</th>
+                <th className="py-3 px-3">Quality</th>
+                <th className="py-3 px-3">SHA-256 Hash</th>
+                <th className="py-3 px-3">Records</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-mono">
-              {filteredRecords.map((item) => (
-                <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-850">
-                  <td className="py-3 px-3 font-bold font-sans text-zinc-900 dark:text-zinc-100">
+            <tbody className="divide-y divide-[var(--border-hairline)]/60 font-mono">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-[var(--text-muted)]">
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[var(--accent-solar)]" />
+                    <span>Verifying cryptographic signatures and data feeds...</span>
+                  </td>
+                </tr>
+              ) : filteredRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-[var(--text-muted)]">
+                    No matching provenance records found.
+                  </td>
+                </tr>
+              ) : (
+                filteredRecords.map((item) => (
+                <tr key={item.id} className="hover:bg-[var(--bg-surface-raised)]/60 transition-colors">
+                  <td className="py-3 px-3 font-bold font-sans text-[var(--text-primary)]">
                     {item.sourceName}
                   </td>
+                  <td className="py-3 px-3 font-sans text-[var(--accent-solar)] font-semibold">
+                    {item.dataType}
+                  </td>
+                  <td className="py-3 px-3 text-[var(--text-muted)] text-[11px]">
+                    {item.spatialResolution} • {item.temporalResolution}
+                  </td>
                   <td className="py-3 px-3 font-sans">
-                    <span className="font-semibold text-sky-600 dark:text-sky-400">
-                      {item.dataType}
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)] text-[var(--text-primary)] font-semibold">
+                      {item.pipelineStage}
                     </span>
                   </td>
-                  <td className="py-3 px-3 font-sans">
-                    <Chip variant="neutral" size="sm">
-                      {item.pipelineStage}
-                    </Chip>
-                  </td>
                   <td className="py-3 px-3">
-                    <span
-                      className={`font-bold ${
-                        item.dataQualityScore >= 98
-                          ? 'text-emerald-500'
-                          : 'text-amber-500'
-                      }`}
-                    >
+                    <span className="font-bold text-[var(--accent-clean)]">
                       {item.dataQualityScore}%
                     </span>
                   </td>
-                  <td className="py-3 px-3 text-zinc-400 text-[11px] truncate max-w-[140px]">
-                    {item.hash}
+                  <td className="py-3 px-3 text-[var(--text-muted)] text-[11px] truncate max-w-[130px]" title={item.hash}>
+                    {item.hash.substring(0, 16)}...
                   </td>
-                  <td className="py-3 px-3 text-zinc-700 dark:text-zinc-300">
+                  <td className="py-3 px-3 text-[var(--text-primary)]">
                     {item.recordCount.toLocaleString()}
                   </td>
-                  <td className="py-3 px-3 text-zinc-400 text-[11px]">
-                    {item.ingestionTimestamp.replace('T', ' ').replace('Z', '')}
-                  </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

@@ -4,42 +4,79 @@ import React, { useState, useEffect } from 'react';
 import {
   Zap,
   BatteryCharging,
-  DollarSign,
-  AlertTriangle,
+  Factory,
+  CheckCircle2,
   RotateCw,
-  Sliders,
-  CheckCircle,
+  History,
 } from 'lucide-react';
 import { DispatchGantt } from '@/components/charts';
-import { KpiCard, OverridePanel } from '@/components/features';
-import { Button, Chip } from '@/components/common';
+import { OverridePanel } from '@/components/features';
+import { Button } from '@/components/common';
 import { dispatchApi } from '@/lib/api';
-import type { DispatchInterval, DispatchSummary } from '@/lib/types';
-import { formatCurrency, formatEnergyMWh } from '@/lib/utils';
+import type {
+  IndustrialAssetTrack,
+  BatteryAssetTrack,
+  EvFleetStubAsset,
+  OptimizationRunHistory,
+} from '@/lib/types';
 import { useRole } from '@/hooks';
 
-export default function DispatchOptimizationPage() {
-  const { role, canOverrideDispatch } = useRole();
-  const [intervals, setIntervals] = useState<DispatchInterval[]>([]);
-  const [summary, setSummary] = useState<DispatchSummary | null>(null);
+export default function DispatchPlanPage() {
+  const { isGridOperator } = useRole();
+  const [industrialTracks, setIndustrialTracks] = useState<IndustrialAssetTrack[]>([]);
+  const [batteryTrack, setBatteryTrack] = useState<BatteryAssetTrack | null>(null);
+  const [evFleetStub, setEvFleetStub] = useState<EvFleetStubAsset | null>(null);
+  const [history, setHistory] = useState<OptimizationRunHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedInterval, setSelectedInterval] = useState<DispatchInterval | null>(null);
+
+  // Override Modal state
+  const [isOverrideOpen, setIsOverrideOpen] = useState(false);
+  const [selectedAssetId, setSelectedAssetId] = useState('ind-vat-2');
+  const [selectedAssetName, setSelectedAssetName] = useState('Textile Finishing Dye-Vat #2');
+  const [selectedWindow, setSelectedWindow] = useState('11:30 – 15:00');
   const [notification, setNotification] = useState<string | null>(null);
 
   const fetchSchedule = async () => {
     setIsLoading(true);
     try {
-      const data = await dispatchApi.getDispatchSchedule();
-      setIntervals(data.intervals);
-      setSummary(data.summary);
+      const data = await dispatchApi.getDispatchTracks();
+      setIndustrialTracks(data.industrialTracks);
+      setBatteryTrack(data.batteryTrack);
+      setEvFleetStub(data.evFleetStub);
+      setHistory(data.history);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSchedule();
+    let isMounted = true;
+    async function init() {
+      setIsLoading(true);
+      try {
+        const data = await dispatchApi.getDispatchTracks();
+        if (isMounted) {
+          setIndustrialTracks(data.industrialTracks);
+          setBatteryTrack(data.batteryTrack);
+          setEvFleetStub(data.evFleetStub);
+          setHistory(data.history);
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    init();
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  const handleOpenOverride = (trackId: string, trackName: string, window: string) => {
+    setSelectedAssetId(trackId);
+    setSelectedAssetName(trackName);
+    setSelectedWindow(window);
+    setIsOverrideOpen(true);
+  };
 
   const handleOverrideSuccess = (msg: string) => {
     setNotification(msg);
@@ -49,19 +86,24 @@ export default function DispatchOptimizationPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[var(--border-hairline)]">
         <div>
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-            <Zap className="w-5 h-5 text-sky-500" />
-            <span>BESS Storage Dispatch & Real-Time Optimization</span>
-          </h2>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Automated MILP (Mixed-Integer Linear Programming) schedule optimizing battery state-of-charge against CAISO day-ahead price nodes.
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)] font-heading flex items-center gap-2">
+              <Zap className="w-6 h-6 text-[var(--accent-solar)]" />
+              <span>Universal Flexible-Load Dispatch Plan</span>
+            </h2>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--accent-clean)]/15 text-[var(--accent-clean)] border border-[var(--accent-clean)]/30">
+              Solver: MILP Converged
+            </span>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            Synchronized co-optimization for flexible industrial loads and BESS battery arbitrage against Bangladesh time-of-use tariffs.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Button
             variant="outline"
             size="sm"
@@ -69,132 +111,177 @@ export default function DispatchOptimizationPage() {
             isLoading={isLoading}
             leftIcon={<RotateCw className="w-3.5 h-3.5" />}
           >
-            Refresh LMP Schedule
+            Re-solve Optimization
           </Button>
-          <Chip variant="success" size="sm" dot>
-            Solver: MILP v4.1 Converged
-          </Chip>
         </div>
       </div>
 
       {notification && (
-        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 shadow-sm">
-          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="p-4 rounded-2xl bg-[var(--accent-clean)]/15 border border-[var(--accent-clean)]/30 text-xs text-[var(--accent-clean)] flex items-center gap-2 shadow-md">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{notification}</span>
         </div>
       )}
 
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          title="Projected Daily Net Revenue"
-          value={summary ? formatCurrency(summary.dailyRevenueUSD) : '$18,450'}
-          changePercent={22.4}
-          changeLabel="vs solar-only feed-in"
-          variant="violet"
-          icon={<DollarSign className="w-5 h-5" />}
-          tooltip="Calculated from peak tariff discharge minus low-price absorption charging"
-        />
-        <KpiCard
-          title="Solar Curtailment Avoided"
-          value={summary ? `${summary.curtailmentAvoidedMWh}` : '42.8'}
-          unit="MWh"
-          changePercent={100}
-          changeLabel="absorbed by BESS"
-          variant="emerald"
-          icon={<BatteryCharging className="w-5 h-5" />}
-          tooltip="Energy diverted to batteries that would have breached transmission limits"
-        />
-        <KpiCard
-          title="Battery Cell Cycling Degradation"
-          value={summary ? `${summary.batteryCycleCount}` : '1.15'}
-          unit="EFC / day"
-          variant="sky"
-          icon={<RotateCw className="w-5 h-5" />}
-          tooltip="Equivalent full cycles; constrained below 1.5/day warranty threshold"
-        />
-        <KpiCard
-          title="Optimal Discharge Window"
-          value="18:00 - 21:00"
-          unit="$142/MWh peak"
-          variant="amber"
-          icon={<Zap className="w-5 h-5" />}
-          tooltip="Target market window delivering maximum wholesale price arbitrage"
-        />
+      {/* Per-Asset KPI Deltas Broken Out Per Track */}
+      <div className="space-y-3">
+        <div className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider font-mono">
+          Per-Track Operational Contribution Deltas
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Industrial Batch Processes Track KPI */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md space-y-3">
+            <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-3">
+              <div className="flex items-center gap-2">
+                <Factory className="w-4 h-4 text-[var(--accent-solar)]" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)] font-heading">
+                  Track 1: Industrial Batch Loads (Dye-Vat & Arc Furnace)
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--accent-solar)]/15 text-[var(--accent-solar)] font-bold">
+                1,100 kW Combined
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="p-3 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)]">
+                <span className="text-[10px] text-[var(--text-muted)] uppercase block font-mono">Cost Saved</span>
+                <span className="text-xl font-extrabold font-mono text-[var(--accent-clean)]">
+                  +$1,240
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">Off-peak shift</span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)]">
+                <span className="text-[10px] text-[var(--text-muted)] uppercase block font-mono">Carbon Avoided</span>
+                <span className="text-xl font-extrabold font-mono text-[var(--accent-solar)]">
+                  6.8 tCO₂
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">Solar alignment</span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)]">
+                <span className="text-[10px] text-[var(--text-muted)] uppercase block font-mono">Peak Shaved</span>
+                <span className="text-xl font-extrabold font-mono text-[var(--text-primary)]">
+                  220 kW
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">Coincident load</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Battery Storage Track KPI */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-md space-y-3">
+            <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-3">
+              <div className="flex items-center gap-2">
+                <BatteryCharging className="w-4 h-4 text-[var(--accent-clean)]" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)] font-heading">
+                  Track 2: Battery Energy Storage (BESS)
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--accent-clean)]/15 text-[var(--accent-clean)] font-bold">
+                2,000 kWh • 68% SoC
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="p-3 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)]">
+                <span className="text-[10px] text-[var(--text-muted)] uppercase block font-mono">Cost Saved</span>
+                <span className="text-xl font-extrabold font-mono text-[var(--accent-clean)]">
+                  +$1,600
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">Arbitrage net</span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)]">
+                <span className="text-[10px] text-[var(--text-muted)] uppercase block font-mono">Carbon Avoided</span>
+                <span className="text-xl font-extrabold font-mono text-[var(--accent-solar)]">
+                  7.4 tCO₂
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">Displaced peakers</span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)]">
+                <span className="text-[10px] text-[var(--text-muted)] uppercase block font-mono">Peak Shaved</span>
+                <span className="text-xl font-extrabold font-mono text-[var(--text-primary)]">
+                  160 kW
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">Evening injection</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Interactive Gantt Timeline */}
-      <DispatchGantt
-        intervals={intervals}
-        onSelectInterval={(inv) => setSelectedInterval(inv)}
+      {/* Main Interactive Multi-Track Gantt Timeline */}
+      {batteryTrack && evFleetStub && (
+        <DispatchGantt
+          industrialTracks={industrialTracks}
+          batteryTrack={batteryTrack}
+          evFleetStub={evFleetStub}
+          onSelectSlot={handleOpenOverride}
+        />
+      )}
+
+      {/* Override Dialog / Modal */}
+      <OverridePanel
+        isOpen={isOverrideOpen}
+        onClose={() => setIsOverrideOpen(false)}
+        initialAssetId={selectedAssetId}
+        initialAssetName={selectedAssetName}
+        initialWindow={selectedWindow}
+        onSuccess={handleOverrideSuccess}
       />
 
-      {/* Override Panel */}
-      <div className="pt-2">
-        <OverridePanel onSuccess={handleOverrideSuccess} />
-      </div>
-
-      {/* Detailed Interval Table */}
-      <div className="p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs">
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 mb-4">
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Dispatch Ledger & Locational Marginal Pricing Table
-            </h3>
-            <p className="text-xs text-zinc-500">
-              Interval-by-interval power routing, state of charge trajectory, and projected financial settlements.
-            </p>
+      {/* History View & Trend Chart: Past optimization runs & KPI trends */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-lg space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-hairline)] pb-4">
+          <div className="flex items-center gap-2">
+            <History className="w-5 h-5 text-[var(--accent-clean)]" />
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] font-heading">
+                Optimization Run History & Trend Ledger
+              </h3>
+              <p className="text-xs text-[var(--text-muted)]">
+                Historical MILP solver convergences, solver latency, and multi-day financial uplift.
+              </p>
+            </div>
           </div>
-          <Chip variant="neutral" size="sm">
-            Node: MOHAVE_500_B1
-          </Chip>
+          <span className="text-xs font-mono text-[var(--accent-solar)] bg-[var(--bg-base)] px-3 py-1.5 rounded-xl border border-[var(--border-hairline)]">
+            Role Access: {isGridOperator ? 'Grid Operator' : 'Facility Manager'}
+          </span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-400 font-semibold uppercase">
-                <th className="py-2.5 px-3">Interval</th>
-                <th className="py-2.5 px-3">Battery Dispatch</th>
-                <th className="py-2.5 px-3">State of Charge</th>
-                <th className="py-2.5 px-3">PV Generation</th>
-                <th className="py-2.5 px-3">Grid LMP Tariff</th>
-                <th className="py-2.5 px-3">Interval Revenue</th>
-                <th className="py-2.5 px-3">Action Type</th>
+              <tr className="border-b border-[var(--border-hairline)] text-[var(--text-muted)] font-mono uppercase text-[11px]">
+                <th className="py-3 px-3">Run ID</th>
+                <th className="py-3 px-3">Timestamp</th>
+                <th className="py-3 px-3">Cost Saved</th>
+                <th className="py-3 px-3">Carbon Avoided</th>
+                <th className="py-3 px-3">Peak Shaved</th>
+                <th className="py-3 px-3">Solver Latency</th>
+                <th className="py-3 px-3">Convergence</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-mono">
-              {intervals.map((item) => (
-                <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-850">
-                  <td className="py-2.5 px-3 font-bold text-zinc-900 dark:text-zinc-100">
-                    {item.timestamp}
+            <tbody className="divide-y divide-[var(--border-hairline)]/60 font-mono">
+              {history.map((run) => (
+                <tr key={run.runId} className="hover:bg-[var(--bg-surface-raised)]/60 transition-colors">
+                  <td className="py-3 px-3 font-bold text-[var(--text-primary)]">{run.runId}</td>
+                  <td className="py-3 px-3 text-[var(--text-muted)]">{run.timestamp}</td>
+                  <td className="py-3 px-3 font-bold text-[var(--accent-clean)]">
+                    +${run.costSavedUsd.toLocaleString()}
                   </td>
-                  <td className="py-2.5 px-3 font-semibold text-zinc-800 dark:text-zinc-200">
-                    {item.batteryPowerMW > 0
-                      ? `+${item.batteryPowerMW} MW`
-                      : `${item.batteryPowerMW} MW`}
+                  <td className="py-3 px-3 text-[var(--accent-solar)]">
+                    {(run.carbonAvoidedKg / 1000).toFixed(1)} tCO₂
                   </td>
-                  <td className="py-2.5 px-3">
-                    <span className="font-semibold text-sky-500">
-                      {item.stateOfChargePercent}%
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-3 text-amber-500 font-semibold">
-                    {item.solarGenerationMW} MW
-                  </td>
-                  <td className="py-2.5 px-3 text-zinc-700 dark:text-zinc-300">
-                    {formatCurrency(item.clearingPricePerMWh)}/MWh
-                  </td>
-                  <td
-                    className={`py-2.5 px-3 font-bold ${
-                      item.projectedRevenueUSD >= 0 ? 'text-emerald-500' : 'text-zinc-400'
-                    }`}
-                  >
-                    {formatCurrency(item.projectedRevenueUSD)}
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <span className="capitalize font-sans font-semibold text-[11px] text-zinc-600 dark:text-zinc-300">
-                      {item.action}
+                  <td className="py-3 px-3 text-[var(--text-primary)]">{run.peakShavedKw} kW</td>
+                  <td className="py-3 px-3 text-[var(--text-muted)]">{run.solverConvergenceMs} ms</td>
+                  <td className="py-3 px-3">
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-[var(--accent-clean)]/15 text-[var(--accent-clean)] font-semibold border border-[var(--accent-clean)]/30">
+                      Optimal
                     </span>
                   </td>
                 </tr>

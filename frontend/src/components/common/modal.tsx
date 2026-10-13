@@ -53,7 +53,7 @@ export function Modal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/70 backdrop-blur-md transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -63,24 +63,24 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          'relative w-full rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl z-10 overflow-hidden flex flex-col max-h-[90vh]',
+          'relative w-full rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-2xl z-10 overflow-hidden flex flex-col max-h-[90vh]',
           maxWidths[maxWidth]
         )}
       >
         {/* Header */}
         {(title || description) && (
-          <div className="flex items-start justify-between px-6 py-5 border-b border-zinc-100 dark:border-zinc-800">
+          <div className="flex items-start justify-between px-6 py-5 border-b border-[var(--border-hairline)]">
             <div>
               {title && (
-                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
+                <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)]">{title}</h3>
               )}
               {description && (
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">{description}</p>
               )}
             </div>
             <button
               onClick={onClose}
-              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1.5 rounded-xl hover:bg-[var(--bg-surface-raised)] cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -92,7 +92,7 @@ export function Modal({
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-900/60 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-3">
+          <div className="px-6 py-4 bg-[var(--bg-surface-raised)] border-t border-[var(--border-hairline)] flex items-center justify-end gap-3">
             {footer}
           </div>
         )}

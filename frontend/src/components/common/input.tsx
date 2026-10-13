@@ -21,14 +21,14 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider"
+            className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider"
           >
             {label}
           </label>
         )}
         <div className="relative flex items-center">
           {leftIcon && (
-            <div className="absolute left-3 flex items-center pointer-events-none text-zinc-400">
+            <div className="absolute left-3.5 flex items-center pointer-events-none text-[var(--text-muted)]">
               {leftIcon}
             </div>
           )}
@@ -36,27 +36,27 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             id={inputId}
             ref={ref}
             className={cn(
-              'w-full rounded-lg border bg-white dark:bg-zinc-900/80 px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-colors',
-              'focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500',
+              'w-full rounded-xl border bg-[var(--bg-surface)] px-4 py-2.5 text-xs sm:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]/60 transition-all',
+              'focus:outline-none focus:ring-2 focus:ring-[var(--accent-solar)]/30 focus:border-[var(--accent-solar)]',
               leftIcon && 'pl-10',
               rightIcon && 'pr-10',
               error
-                ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500/20'
-                : 'border-zinc-300 dark:border-zinc-700',
+                ? 'border-[var(--accent-stress)] focus:border-[var(--accent-stress)] focus:ring-[var(--accent-stress)]/20'
+                : 'border-[var(--border-hairline)]',
               className
             )}
             {...props}
           />
           {rightIcon && (
-            <div className="absolute right-3 flex items-center pointer-events-none text-zinc-400">
+            <div className="absolute right-3.5 flex items-center pointer-events-none text-[var(--text-muted)]">
               {rightIcon}
             </div>
           )}
         </div>
         {error ? (
-          <p className="text-xs text-rose-500 font-medium">{error}</p>
+          <p className="text-xs text-[var(--accent-stress)] font-medium">{error}</p>
         ) : helperText ? (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">{helperText}</p>
+          <p className="text-xs text-[var(--text-muted)]">{helperText}</p>
         ) : null}
       </div>
     );

@@ -4,7 +4,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 
 export interface ChipProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'amber';
+  variant?: 'clean' | 'solar' | 'stress' | 'architecture-ready' | 'neutral' | 'success' | 'warning' | 'danger' | 'info';
   size?: 'sm' | 'md';
   dot?: boolean;
 }
@@ -17,22 +17,28 @@ export function Chip({
   children,
   ...props
 }: ChipProps) {
-  const variants = {
-    success: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60',
-    warning: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60',
-    danger: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60',
-    info: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/60',
-    neutral: 'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
-    amber: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700',
+  const variants: Record<string, string> = {
+    clean: 'bg-[var(--accent-clean)]/15 text-[var(--accent-clean)] border-[var(--accent-clean)]/30',
+    success: 'bg-[var(--accent-clean)]/15 text-[var(--accent-clean)] border-[var(--accent-clean)]/30',
+    solar: 'bg-[var(--accent-solar)]/15 text-[var(--accent-solar)] border-[var(--accent-solar)]/30',
+    warning: 'bg-[var(--accent-solar)]/15 text-[var(--accent-solar)] border-[var(--accent-solar)]/30',
+    stress: 'bg-[var(--accent-stress)]/15 text-[var(--accent-stress)] border-[var(--accent-stress)]/30',
+    danger: 'bg-[var(--accent-stress)]/15 text-[var(--accent-stress)] border-[var(--accent-stress)]/30',
+    info: 'bg-[var(--bg-surface-raised)] text-[var(--accent-solar)] border-[var(--border-hairline)]',
+    neutral: 'bg-[var(--bg-surface-raised)] text-[var(--text-muted)] border-[var(--border-hairline)]',
+    'architecture-ready': 'bg-[var(--tag-architecture-ready)]/20 text-[var(--tag-architecture-ready)] border-[var(--tag-architecture-ready)]/40',
   };
 
-  const dotColors = {
-    success: 'bg-emerald-500',
-    warning: 'bg-amber-500',
-    danger: 'bg-rose-500',
-    info: 'bg-sky-500',
-    neutral: 'bg-zinc-400',
-    amber: 'bg-amber-500',
+  const dotColors: Record<string, string> = {
+    clean: 'bg-[var(--accent-clean)]',
+    success: 'bg-[var(--accent-clean)]',
+    solar: 'bg-[var(--accent-solar)]',
+    warning: 'bg-[var(--accent-solar)]',
+    stress: 'bg-[var(--accent-stress)]',
+    danger: 'bg-[var(--accent-stress)]',
+    info: 'bg-[var(--accent-solar)]',
+    neutral: 'bg-[var(--text-muted)]',
+    'architecture-ready': 'bg-[var(--tag-architecture-ready)]',
   };
 
   const sizes = {
@@ -44,7 +50,7 @@ export function Chip({
     <span
       className={cn(
         'inline-flex items-center font-medium rounded-full border tracking-wide transition-colors',
-        variants[variant],
+        variants[variant] || variants.neutral,
         sizes[size],
         className
       )}
@@ -52,7 +58,7 @@ export function Chip({
     >
       {dot && (
         <span
-          className={cn('w-1.5 h-1.5 rounded-full shrink-0 animate-pulse', dotColors[variant])}
+          className={cn('w-1.5 h-1.5 rounded-full shrink-0 animate-pulse', dotColors[variant] || dotColors.neutral)}
         />
       )}
       <span>{children}</span>

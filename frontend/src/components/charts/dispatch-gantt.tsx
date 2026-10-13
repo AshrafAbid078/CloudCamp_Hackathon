@@ -1,137 +1,232 @@
 'use client';
 
-import React, { useState } from 'react';
-import type { DispatchInterval } from '@/lib/types';
-import { Chip } from '@/components/common';
-import { formatPowerMW, formatCurrency } from '@/lib/utils';
-import { BatteryCharging, Battery, ArrowUpRight, ArrowDownLeft, Clock, DollarSign } from 'lucide-react';
+import React from 'react';
+import {
+  IndustrialAssetTrack,
+  BatteryAssetTrack,
+  EvFleetStubAsset,
+} from '@/lib/types';
+import { BatteryCharging, Factory, Truck, Edit3 } from 'lucide-react';
 
 interface DispatchGanttProps {
-  intervals: DispatchInterval[];
-  onSelectInterval?: (interval: DispatchInterval) => void;
+  industrialTracks: IndustrialAssetTrack[];
+  batteryTrack: BatteryAssetTrack;
+  evFleetStub: EvFleetStubAsset;
+  onSelectSlot?: (trackId: string, trackName: string, window: string) => void;
 }
 
-export function DispatchGantt({ intervals, onSelectInterval }: DispatchGanttProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const handleSelect = (interval: DispatchInterval) => {
-    setSelectedId(interval.id);
-    if (onSelectInterval) {
-      onSelectInterval(interval);
-    }
-  };
+export function DispatchGantt({
+  industrialTracks,
+  batteryTrack,
+  evFleetStub,
+  onSelectSlot,
+}: DispatchGanttProps) {
+  const timeLabels = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
 
   return (
-    <div className="w-full p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs flex flex-col">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800 mb-4 gap-2">
+    <div className="w-full p-5 sm:p-6 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-lg space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[var(--border-hairline)] gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            24h Battery Dispatch Schedule & LMP Arbitrage
-          </h2>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Real-time optimization engine schedules storage to absorb solar and discharge at evening peak tariffs.
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] font-heading">
+              Universal Multi-Track Dispatch Timeline
+            </h2>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-[var(--accent-clean)]/15 text-[var(--accent-clean)] border border-[var(--accent-clean)]/30">
+              Solver: MILP Optimal
+            </span>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Synchronized scheduling across heavy industrial flexible batch loads and BESS storage.
           </p>
         </div>
-        <div className="flex items-center gap-3 text-xs">
-          <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-            <span className="w-2.5 h-2.5 rounded bg-emerald-500"></span>
-            <span>Charge (Absorb)</span>
+
+        {/* Legend */}
+        <div className="flex items-center gap-3 text-xs flex-wrap">
+          <div className="flex items-center gap-1.5 text-[var(--accent-solar)] font-medium">
+            <span className="w-2.5 h-2.5 rounded bg-[var(--accent-solar)]"></span>
+            <span>Solar Absorption</span>
           </div>
-          <div className="flex items-center gap-1.5 text-violet-600 dark:text-violet-400 font-medium">
-            <span className="w-2.5 h-2.5 rounded bg-violet-500"></span>
-            <span>Discharge (Peak)</span>
+          <div className="flex items-center gap-1.5 text-[var(--accent-clean)] font-medium">
+            <span className="w-2.5 h-2.5 rounded bg-[var(--accent-clean)]"></span>
+            <span>Stress Discharge</span>
           </div>
-          <div className="flex items-center gap-1.5 text-zinc-400 font-medium">
-            <span className="w-2.5 h-2.5 rounded bg-zinc-300 dark:bg-zinc-700"></span>
-            <span>Hold</span>
+          <div className="flex items-center gap-1.5 text-[var(--tag-architecture-ready)] font-medium">
+            <span className="w-2.5 h-2.5 rounded bg-[var(--tag-architecture-ready)]"></span>
+            <span>Stub Track</span>
           </div>
         </div>
       </div>
 
-      {/* Timeline Gantt Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {intervals.map((item) => {
-          const isSelected = selectedId === item.id;
-          const isCharging = item.action === 'charge';
-          const isDischarging = item.action === 'discharge';
+      {/* Time Axis Bar */}
+      <div className="hidden md:grid grid-cols-9 gap-1 text-[11px] font-mono text-[var(--text-muted)] text-center pb-2 border-b border-[var(--border-hairline)]/50">
+        {timeLabels.map((t) => (
+          <span key={t}>{t} BST</span>
+        ))}
+      </div>
 
-          return (
-            <div
-              key={item.id}
-              onClick={() => handleSelect(item)}
-              className={`p-3.5 rounded-xl border transition-all cursor-pointer relative ${
-                isSelected
-                  ? 'border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/30 dark:bg-sky-950/20'
-                  : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-900/50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                  <span className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                    {item.timestamp}
+      {/* Track 1: Industrial Batch Loads */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-primary)]">
+            <Factory className="w-4 h-4 text-[var(--accent-solar)]" />
+            <span>Track A: Industrial Batch Load Processes</span>
+          </div>
+          <span className="text-[11px] text-[var(--text-muted)] font-mono">
+            Coupled to Bangladesh TOU Off-Peak & Midday Solar
+          </span>
+        </div>
+
+        {industrialTracks.map((item) => (
+          <div
+            key={item.id}
+            className="p-4 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)] hover:border-[var(--accent-solar)]/50 transition-all space-y-3"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <span>{item.name}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--accent-solar)]/15 text-[var(--accent-solar)] font-mono">
+                    {item.powerKw} kW
                   </span>
                 </div>
-                <Chip
-                  variant={isCharging ? 'success' : isDischarging ? 'info' : 'neutral'}
-                  size="sm"
-                  className="uppercase font-semibold tracking-wider"
-                >
-                  {item.action}
-                </Chip>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{item.facility}</p>
               </div>
 
-              {/* Power and SoC Bar */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
-                    {isDischarging ? (
-                      <ArrowUpRight className="w-3.5 h-3.5 text-violet-500" />
-                    ) : isCharging ? (
-                      <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-500" />
-                    ) : (
-                      <Battery className="w-3.5 h-3.5 text-zinc-400" />
-                    )}
-                    BESS Output:
+              <div className="flex items-center gap-3">
+                <div className="text-right text-[11px]">
+                  <span className="text-[var(--accent-clean)] font-bold font-mono">
+                    +${item.costSavedUsd} saved
                   </span>
-                  <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-100">
-                    {formatPowerMW(item.batteryPowerMW)}
+                  <span className="text-[var(--text-muted)] block text-[10px]">
+                    {item.carbonAvoidedKg / 1000} tCO₂ avoided
                   </span>
                 </div>
 
-                {/* State of Charge Progress Bar */}
-                <div className="w-full">
-                  <div className="flex justify-between text-[10px] text-zinc-400 mb-1">
-                    <span>SoC Level</span>
-                    <span className="font-mono font-bold text-zinc-700 dark:text-zinc-300">
-                      {item.stateOfChargePercent}%
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all rounded-full ${
-                        item.stateOfChargePercent > 80
-                          ? 'bg-emerald-500'
-                          : item.stateOfChargePercent > 30
-                          ? 'bg-sky-500'
-                          : 'bg-amber-500'
-                      }`}
-                      style={{ width: `${item.stateOfChargePercent}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* LMP Market Clearing & Yield */}
-                <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400">LMP Price:</span>
-                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                    {formatCurrency(item.clearingPricePerMWh)}/MWh
-                  </span>
-                </div>
+                <button
+                  onClick={() => onSelectSlot?.(item.id, item.name, item.chosenRunWindow)}
+                  className="px-2.5 py-1.5 rounded-xl border border-[var(--border-hairline)] hover:border-[var(--accent-solar)] text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Edit3 className="w-3 h-3 text-[var(--accent-solar)]" />
+                  <span>Override</span>
+                </button>
               </div>
             </div>
-          );
-        })}
+
+            {/* Visual Schedule Bar */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                <span>Earliest: {item.earliestStart}</span>
+                <span className="font-semibold text-[var(--accent-solar)] font-mono">
+                  Allocated Window: {item.chosenRunWindow} ({item.durationHours}h)
+                </span>
+                <span>Deadline: {item.deadline}</span>
+              </div>
+
+              {/* Progress Bar with highlighted active solar window */}
+              <div className="w-full h-3 bg-[var(--bg-base)] rounded-full overflow-hidden relative border border-[var(--border-hairline)]">
+                <div
+                  className="h-full bg-gradient-to-r from-[var(--accent-solar)] to-[var(--accent-clean)] rounded-full transition-all"
+                  style={{
+                    marginLeft: '36%', // ~11:30 position
+                    width: '32%', // 3.5 hour window
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Track 2: Battery Storage (BESS) */}
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-primary)]">
+            <BatteryCharging className="w-4 h-4 text-[var(--accent-clean)]" />
+            <span>Track B: Utility / Facility BESS Battery Storage</span>
+          </div>
+          <span className="text-[11px] text-[var(--text-muted)] font-mono">
+            {batteryTrack.capacityKwh} kWh Capacity • {batteryTrack.currentSocPercent}% SoC
+          </span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface-raised)] border border-[var(--border-hairline)] hover:border-[var(--accent-clean)]/50 transition-all space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <span>{batteryTrack.name}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--accent-clean)]/15 text-[var(--accent-clean)] font-mono">
+                  Rate: ±{batteryTrack.chargeDischargeRateKw} kW
+                </span>
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{batteryTrack.facility}</p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="text-right text-[11px]">
+                <span className="text-[var(--accent-clean)] font-bold font-mono">
+                  +${batteryTrack.costSavedUsd} saved
+                </span>
+                <span className="text-[var(--text-muted)] block text-[10px]">
+                  {batteryTrack.carbonAvoidedKg / 1000} tCO₂ avoided • {batteryTrack.peakKwShaved} kW shaved
+                </span>
+              </div>
+
+              <button
+                onClick={() => onSelectSlot?.(batteryTrack.id, batteryTrack.name, '18:30 – 21:00')}
+                className="px-2.5 py-1.5 rounded-xl border border-[var(--border-hairline)] hover:border-[var(--accent-clean)] text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Edit3 className="w-3 h-3 text-[var(--accent-clean)]" />
+                <span>Override</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Visual Dual-Cycle Schedule Bar */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+              <span className="text-[var(--accent-solar)] font-semibold font-mono">
+                Absorption: {batteryTrack.chargeWindows[0]}
+              </span>
+              <span className="text-[var(--accent-clean)] font-semibold font-mono">
+                Discharge: {batteryTrack.dischargeWindows[0]}
+              </span>
+            </div>
+
+            <div className="w-full h-3 bg-[var(--bg-base)] rounded-full overflow-hidden relative border border-[var(--border-hairline)] flex">
+              {/* Charge window (midday solar) */}
+              <div
+                className="h-full bg-[var(--accent-solar)] rounded-l-full"
+                style={{ marginLeft: '32%', width: '22%' }}
+                title="Battery Absorption Window"
+              />
+              {/* Discharge window (evening stress) */}
+              <div
+                className="h-full bg-[var(--accent-clean)] rounded-r-full"
+                style={{ marginLeft: '24%', width: '18%' }}
+                title="Battery Stress Relief Window"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Track 3: EV Fleet — Architecture-Ready Stub */}
+      <div className="pt-2">
+        <div className="p-4 rounded-2xl bg-[var(--bg-base)]/50 border border-dashed border-[var(--tag-architecture-ready)]/60 text-xs text-[var(--text-muted)] space-y-2 opacity-85">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Truck className="w-4 h-4 text-[var(--tag-architecture-ready)]" />
+              <span className="font-bold text-[var(--text-primary)]">{evFleetStub.name}</span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[var(--tag-architecture-ready)]/20 text-[var(--tag-architecture-ready)] border border-[var(--tag-architecture-ready)]/40">
+              Architecture-Ready Stub
+            </span>
+          </div>
+          <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+            {evFleetStub.note} Supporting {evFleetStub.vehicleCount} fleet delivery vans ({evFleetStub.depotCapacityKw} kW connected capacity).
+          </p>
+        </div>
       </div>
     </div>
   );

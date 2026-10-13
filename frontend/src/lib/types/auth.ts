@@ -1,4 +1,4 @@
-export type UserRole = 'operator' | 'analyst' | 'executive' | 'engineer';
+export type UserRole = 'facility_manager' | 'grid_operator';
 
 export interface User {
   id: string;
@@ -6,21 +6,26 @@ export interface User {
   email: string;
   role: UserRole;
   avatarUrl?: string;
-  assignedPlantId?: string;
+  organization?: string;
+  facilityLocation?: string;
 }
 
 export interface AuthSession {
   user: User | null;
   isAuthenticated: boolean;
   token?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface RolePermission {
   role: UserRole;
   displayName: string;
+  tagline: string;
+  badgeEmoji: string;
   description: string;
+  perspective: 'action-first' | 'terse-numeric';
   canOverrideDispatch: boolean;
   canEditSettings: boolean;
   canExportData: boolean;
-  canManageUsers: boolean;
+  canRunWhatIf: boolean;
 }

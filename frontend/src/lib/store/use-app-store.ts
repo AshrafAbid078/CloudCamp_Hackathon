@@ -40,7 +40,7 @@ const INITIAL_MESSAGES: CopilotMessage[] = [
 ];
 
 export const useAppStore = create<AppState>((set) => ({
-  currentRole: 'operator',
+  currentRole: 'grid_operator',
   setRole: (role) => set({ currentRole: role }),
 
   selectedPlantId: 'mohave-solar-bess-1',
