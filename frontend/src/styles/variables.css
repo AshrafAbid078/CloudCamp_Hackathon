@@ -1,0 +1,49 @@
+/* Twilight Grid Design Tokens & Color Palette */
+:root {
+  --bg-base: #0E1B2A;
+  --bg-surface: #152A3F;
+  --bg-surface-raised: #1C3550;
+  --accent-solar: #E8A33D;
+  --accent-clean: #2FA98C;
+  --accent-stress: #E0604D;
+  --text-primary: #F3EFE6;
+  --text-muted: #93A3B5;
+  --border-hairline: #26405C;
+  --tag-architecture-ready: #5B6B7C;
+
+  /* Typography */
+  --font-heading: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-code: 'JetBrains Mono', monospace;
+}
+
+/* Glassmorphism panel for Twilight Grid */
+.twilight-panel {
+  background: rgba(21, 42, 63, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-hairline);
+}
+
+.twilight-panel-raised {
+  background: rgba(28, 53, 80, 0.9);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(232, 163, 61, 0.2);
+}
+
+/* Solar day/night sweep effect */
+@keyframes solarSweep {
+  0% { transform: translateX(-100%); opacity: 0; }
+  50% { opacity: 0.6; }
+  100% { transform: translateX(200%); opacity: 0; }
+}
+
+.animate-solar-sweep {
+  animation: solarSweep 8s ease-in-out infinite;
+}
+
+/* Tabular figures for strict numerical alignment */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
