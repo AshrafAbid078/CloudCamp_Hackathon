@@ -30,9 +30,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   clearError: () => set({ error: null }),
 
   checkBackendStatus: async () => {
-    const health = await authApi.checkHealth();
-    set({ backendOnline: health.isOnline });
-    return health.isOnline;
+    try {
+      const health = await authApi.checkHealth();
+      set({ backendOnline: health.isOnline });
+      return health.isOnline;
+    } catch {
+      set({ backendOnline: false });
+      return false;
+    }
   },
 
   checkAuth: async () => {
