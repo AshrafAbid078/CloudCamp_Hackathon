@@ -18,7 +18,9 @@ scikit-learn==1.9.0
 joblib==1.5.3
 
 # Optimization (Phase 3 dispatch)
-pulp>=2.8.0
+# NOTE: PuLP 4.x replaced PULP_CBC_CMD with HiGHS; highspy provides the Python bindings.
+pulp>=4.0.0
+highspy>=1.7.0          # HiGHS solver Python bindings required by PuLP 4.x
 
 # Database (Phase 4)
 sqlalchemy>=2.0         # ORM + SQLite engine

@@ -1,4 +1,5 @@
 import pulp
+from pulp import HiGHS
 
 
 def solve_process_schedule(
@@ -35,8 +36,9 @@ def solve_process_schedule(
         pulp.LpMinimize,
     )
 
+    # PuLP 4.x: variables must be created via problem.add_variable()
     x = {
-        t: pulp.LpVariable(
+        t: problem.add_variable(
             f"run_{t}",
             cat="Binary",
         )
@@ -62,11 +64,10 @@ def solve_process_schedule(
         == duration
     )
 
-    problem.solve(
-        pulp.PULP_CBC_CMD(msg=False)
-    )
+    # PuLP 4.x: solve() returns a result object; PULP_CBC_CMD is removed — use HiGHS
+    result = problem.solve(HiGHS(msg=False))
 
-    if pulp.LpStatus[problem.status] != "Optimal":
+    if result.status_str != "Optimal":
         raise RuntimeError(
             "No optimal schedule was found."
         )
@@ -74,7 +75,7 @@ def solve_process_schedule(
     selected_hours = [
         t
         for t in available_slots
-        if pulp.value(x[t]) == 1
+        if round(pulp.value(x[t])) == 1
     ]
 
     total_cost = sum(
@@ -94,7 +95,7 @@ def solve_process_schedule(
     )
 
     return {
-        "status": pulp.LpStatus[problem.status],
+        "status": result.status_str,
         "scheduled_hours": selected_hours,
         "total_cost": total_cost,
         "total_emissions_gco2": total_emissions,
@@ -185,8 +186,9 @@ def solve_battery_schedule(
         pulp.LpMinimize,
     )
 
+    # PuLP 4.x: variables must be created via problem.add_variable()
     charge = {
-        t: pulp.LpVariable(
+        t: problem.add_variable(
             f"charge_{t}",
             lowBound=0,
             upBound=charge_rate_kw,
@@ -195,7 +197,7 @@ def solve_battery_schedule(
     }
 
     discharge = {
-        t: pulp.LpVariable(
+        t: problem.add_variable(
             f"discharge_{t}",
             lowBound=0,
             upBound=discharge_rate_kw,
@@ -207,7 +209,7 @@ def solve_battery_schedule(
     min_energy = capacity_kwh * min_soc
 
     energy = {
-        t: pulp.LpVariable(
+        t: problem.add_variable(
             f"energy_{t}",
             lowBound=min_energy,
             upBound=capacity_kwh,
@@ -216,7 +218,7 @@ def solve_battery_schedule(
     }
 
     mode = {
-        t: pulp.LpVariable(
+        t: problem.add_variable(
             f"mode_{t}",
             cat="Binary",
         )
@@ -291,11 +293,10 @@ def solve_battery_schedule(
     # SOLVE
     # -------------------------------------------------
 
-    problem.solve(
-        pulp.PULP_CBC_CMD(msg=False)
-    )
+    # PuLP 4.x: solve() returns a result object; PULP_CBC_CMD is removed — use HiGHS
+    result = problem.solve(HiGHS(msg=False))
 
-    if pulp.LpStatus[problem.status] != "Optimal":
+    if result.status_str != "Optimal":
         raise RuntimeError(
             "No optimal battery schedule was found."
         )
@@ -349,7 +350,7 @@ def solve_battery_schedule(
     )
 
     return {
-        "status": pulp.LpStatus[problem.status],
+        "status": result.status_str,
         "schedule": schedule,
         "total_cost": round(total_cost, 6),
         "total_emissions_gco2": round(
