@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from dispatch.api import router as dispatch_router
+from backend.dispatch.api import router as dispatch_router
 
 app = FastAPI(
     title="AI Builders API",

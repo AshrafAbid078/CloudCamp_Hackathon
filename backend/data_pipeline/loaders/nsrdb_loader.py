@@ -6,6 +6,7 @@ cleans the data, and saves it as a Parquet file for downstream processing.
 """
 
 import logging
+import csv
 from pathlib import Path
 import pandas as pd
 # pyrefly: ignore [missing-import]
@@ -82,7 +83,14 @@ class NSRDBLoader:
         frames = []
         for file_path in self.input_files:
             logger.info(f"Loading {file_path.name}...")
-            df = pd.read_csv(file_path, skiprows=2, low_memory=False)
+            with file_path.open(encoding="utf-8", newline="") as source:
+                reader = csv.reader(source)
+                metadata = dict(zip(next(reader), next(reader)))
+            if "Time Zone" not in metadata:
+                raise ValueError(f"Missing NSRDB Time Zone metadata: {file_path.name}")
+            needed = set(SELECTED_COLUMNS) | {"Year", "Month", "Day", "Hour", "Minute"}
+            df = pd.read_csv(file_path, skiprows=2, low_memory=False, usecols=lambda col: col in needed)
+            df["source_utc_offset_hours"] = float(metadata["Time Zone"])
             frames.append(df)
             
         df = pd.concat(frames, ignore_index=True)
@@ -111,8 +119,12 @@ class NSRDBLoader:
             errors="coerce",
         )
         
-        # NSRDB data is in local time. Bangladesh is UTC+6 (Asia/Dhaka)
-        df["timestamp"] = df["timestamp"].dt.tz_localize("Asia/Dhaka").dt.tz_convert("UTC")  # type: ignore
+        if "source_utc_offset_hours" not in df:
+            raise ValueError("Source timezone metadata is required; do not assume local time")
+        # Time Zone describes the CSV clock. Local Time Zone is display metadata.
+        df["timestamp"] = pd.to_datetime(
+            df["timestamp"] - pd.to_timedelta(df["source_utc_offset_hours"], unit="h"), utc=True
+        )
 
         return df
 
@@ -136,6 +148,7 @@ class NSRDBLoader:
         for column in df.columns:
             if column != "timestamp":
                 df[column] = pd.to_numeric(df[column], errors="coerce")
+                df.loc[df[column] == -9999, column] = np.nan
 
         # Remove invalid timestamps and sort
         df = df.dropna(subset=["timestamp"]).sort_values("timestamp")
@@ -192,6 +205,7 @@ def main() -> None:
         pipeline.run()
     except Exception as e:
         logger.error(f"Pipeline failed: {e}", exc_info=True)
+        raise
 
 
 if __name__ == "__main__":

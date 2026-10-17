@@ -17,7 +17,7 @@ from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from config import settings
+from backend.config import settings
 
 # ------------------------------------------------------------------ #
 # Engine setup                                                         #
@@ -81,11 +81,9 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     """
-    Create all tables that don't yet exist.
+    Upgrade the schema through Alembic, adopting a validated legacy schema.
     Called once at server startup (via lifespan in main.py).
     Safe to call repeatedly — does NOT drop existing data.
     """
-    # Import models here so SQLAlchemy registers them on Base.metadata
-    # before create_all() is called.
-    import db.models  # noqa: F401
-    Base.metadata.create_all(bind=engine)
+    from backend.db.migrations import upgrade_database
+    upgrade_database(engine)

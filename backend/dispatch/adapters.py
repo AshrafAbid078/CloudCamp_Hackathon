@@ -52,6 +52,7 @@ class IndustrialProcessAdapter:
     duration: int
 
     asset_type: str = "industrial"
+    interruptible: bool = True
 
     def get_constraints(self) -> dict:
         """
@@ -63,6 +64,7 @@ class IndustrialProcessAdapter:
             "deadline": self.deadline,
             "duration": self.duration,
             "power_kw": self.power_kw,
+            "interruptible": self.interruptible,
         }
 
 

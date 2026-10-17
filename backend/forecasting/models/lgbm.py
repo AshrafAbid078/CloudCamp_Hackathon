@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+from pathlib import Path
+import re
 # pyrefly: ignore [missing-import]
 import sklearn.metrics  # Ensures OpenMP runtime is initialized on Windows before LightGBM C library loads
 # pyrefly: ignore [missing-import]
@@ -67,7 +69,11 @@ class GBMForecaster(ForecasterBase):
 
         # Force C-contiguous float64 — required for safe native interop
         # with LightGBM's C library under NumPy 2.x.
-        X_np = np.ascontiguousarray(X.to_numpy(dtype=np.float64))
+        columns = {str(name).replace(" ", "_"): name for name in X.columns}
+        expected = self._booster.feature_name()
+        if set(expected) != set(columns):
+            raise ValueError("Input features do not match the trained model schema")
+        X_np = np.ascontiguousarray(X[[columns[name] for name in expected]].to_numpy(dtype=np.float64))
 
         # Call the native Booster directly — bypasses sklearn's
         # feature-name validation and any joblib reconstruction issues.
@@ -82,6 +88,9 @@ class GBMForecaster(ForecasterBase):
         if not self.is_fitted or self._booster is None:
             raise ValueError("Model is not fitted, nothing to save.")
         self._booster.save_model(filepath)
+        # LightGBM may append pandas metadata using platform newlines on Windows.
+        path = Path(filepath)
+        path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n"))
 
     def load(self, filepath: str):
         """
@@ -89,5 +98,21 @@ class GBMForecaster(ForecasterBase):
         Uses lgb.Booster(model_file=...) which properly reconstructs the
         C handle regardless of LightGBM / Python version differences.
         """
-        self._booster = lgb.Booster(model_file=filepath)
+        # Read text ourselves to undo CRLF conversion before the native parser
+        # uses the embedded byte offsets. Reject broken offsets in Python: the
+        # native loader may abort the whole process instead of raising.
+        model_text = Path(filepath).read_text(encoding="utf-8")
+        raw = model_text.encode("utf-8")
+        sizes_match = re.search(rb"(?m)^tree_sizes=([^\n]+)", raw)
+        starts = [m.start() for m in re.finditer(rb"(?m)^Tree=\d+\n", raw)]
+        if not raw.startswith(b"tree\n") or sizes_match is None or not starts:
+            raise ValueError("Invalid LightGBM native model header")
+        sizes = [int(value) for value in sizes_match.group(1).split()]
+        end = raw.find(b"end of trees", starts[-1])
+        boundaries = starts[1:] + [end]
+        if len(starts) != len(sizes) or any(
+            stop - start != size for start, stop, size in zip(starts, boundaries, sizes)
+        ):
+            raise ValueError("LightGBM tree byte offsets do not match model contents")
+        self._booster = lgb.Booster(model_str=model_text)
         self.is_fitted = True

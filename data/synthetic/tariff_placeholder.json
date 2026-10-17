@@ -1,6 +1,7 @@
 {
     "description": "Simplified Time-of-Use (TOU) electricity tariff placeholder. Values in USD/kWh.",
     "currency": "USD",
+    "timezone": "Asia/Dhaka",
     "unit": "kWh",
     "rates": {
         "off_peak": {

@@ -5,10 +5,10 @@ from .base import ForecasterBase
 class PersistenceForecaster(ForecasterBase):
     """
     Persistence baseline implementation: "tomorrow looks like today".
-    Simply returns the value from 24 hours ago as the forecast.
+    Each feature row at t predicts t+24h using the observed GHI at t.
     """
     
-    def __init__(self, lag_feature_col: str = 'GHI_lag_24'):
+    def __init__(self, lag_feature_col: str = 'GHI'):
         self.lag_feature_col = lag_feature_col
         self.is_fitted = False
         
@@ -21,7 +21,7 @@ class PersistenceForecaster(ForecasterBase):
         
     def predict(self, X: pd.DataFrame) -> pd.Series:
         """
-        Return the 24h lagged feature as the prediction.
+        Return the observation at the forecast origin (24h before the target).
 
         Returns a pd.Series aligned to X's index so boolean mask indexing
         (e.g. y_pred[mask]) is always label-safe rather than positional.

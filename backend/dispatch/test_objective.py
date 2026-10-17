@@ -1,4 +1,4 @@
-from dispatch.objective import calculate_objective
+from backend.dispatch.objective import calculate_objective
 
 
 def test_objective_default_weights():

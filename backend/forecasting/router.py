@@ -1,179 +1,101 @@
-# pyrefly: ignore [missing-import]
-from fastapi import APIRouter, Depends, HTTPException, Query
-import pandas as pd
-import numpy as np
+"""Historical demo solar forecast with live-or-cached carbon metadata."""
 import json
+import logging
 from pathlib import Path
-from typing import Dict, Any
+import pandas as pd
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from backend.auth.utils import require_role
+from backend.db.database import get_db
+from backend.db.models import UserRole
+from backend.forecasting.features import build_features, physical_solar, FORECAST_LEAD_HOURS, GFS_COLUMNS
+from backend.forecasting.models.baseline import PersistenceForecaster
+from backend.forecasting.models.lgbm import GBMForecaster
+from backend.forecasting.carbon import carbon_signal
 
-from .features import build_features
-from .models.baseline import PersistenceForecaster
-from .models.lgbm import GBMForecaster
-from auth.utils import require_role
-from db.models import UserRole
-
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/forecast", tags=["forecasting"])
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
-MODELS_DIR = Path(__file__).resolve().parent / "models" / "saved"
+PROCESSED_DIR = PROJECT_ROOT/"data/processed"
+MODELS_DIR = Path(__file__).parent/"models/saved"
+_MODEL_PATH = MODELS_DIR/"lgbm_solar.joblib"
+_METRICS_PATH = MODELS_DIR/"lgbm_metrics.json"
 
-# ---------------------------------------------------------------------------
-# Model + metrics — loaded once at module import time (not per-request).
-# Prefer the trained LightGBM model if it exists on disk; fall back to the
-# stateless persistence baseline so the endpoint always works.
-# ---------------------------------------------------------------------------
-
-_MODEL_PATH = MODELS_DIR / "lgbm_solar.joblib"
-_METRICS_PATH = MODELS_DIR / "lgbm_metrics.json"
+def _baseline_accuracy(metrics, reason=None):
+    scores = metrics.get("benchmarks", {}).get("PersistenceBaseline", {})
+    return {**metrics, "model": "PersistenceBaseline", "rmse": scores.get("rmse"),
+            "mape": scores.get("mape"), "mae": scores.get("mae"), "fallback_reason": reason}
 
 def _load_forecaster():
-    """
-    Returns (forecaster, accuracy_dict).
-    Uses LightGBM if the saved model file exists; otherwise falls back to the
-    persistence baseline with a clearly-labelled placeholder accuracy dict.
-    """
-    if _MODEL_PATH.exists():
-        forecaster = GBMForecaster()
-        forecaster.load(str(_MODEL_PATH))
-
+    metrics = {}
+    try:
         if _METRICS_PATH.exists():
-            with open(_METRICS_PATH) as f:
-                metrics = json.load(f)
-            accuracy = {
-                "model": metrics.get("model", "LightGBM"),
-                "rmse": metrics.get("rmse"),
-                "mape": metrics.get("mape"),
-            }
-        else:
-            # Model exists but metrics file not yet generated — run test_forecasting.py
-            accuracy = {
-                "model": "LightGBM",
-                "rmse": None,
-                "mape": None,
-                "note": "Metrics not yet computed. Run backend/forecasting/test_forecasting.py.",
-            }
-
-        return forecaster, accuracy
-
-    # Fallback: persistence baseline
-    forecaster = PersistenceForecaster(lag_feature_col='GHI_lag_24')
-    forecaster.fit(None, None)
-    accuracy = {
-        "model": "PersistenceBaseline",
-        "rmse": None,
-        "mape": None,
-        "note": "LightGBM model not found. Run test_forecasting.py to train and save it.",
-    }
-    return forecaster, accuracy
-
+            metrics = json.loads(_METRICS_PATH.read_text(encoding="utf-8"))
+        if metrics.get("schema_version") != 2:
+            raise ValueError("Rebuild model metrics with python -m backend.forecasting.train")
+        if metrics.get("model") == "LightGBM":
+            model = GBMForecaster()
+            model.load(str(_MODEL_PATH))
+            return model, metrics
+        return PersistenceForecaster().fit(None, None), _baseline_accuracy(metrics)
+    except (OSError, ValueError, RuntimeError) as exc:
+        logger.warning("Using persistence solar fallback: %s", exc)
+        return PersistenceForecaster().fit(None, None), _baseline_accuracy(metrics, str(exc))
 
 _forecaster, _accuracy = _load_forecaster()
 
-
-def get_forecast(region: str, horizon_hours: int = 24) -> Dict[str, Any]:
-    """
-    Core forecast logic — callable directly from tests and CLI,
-    without requiring a FastAPI request context.
-
-    Args:
-        region: The region code (currently only 'bd' is live).
-        horizon_hours: Number of hours ahead to forecast.
-
-    Returns:
-        A dict with region, horizon_hours, accuracy metadata, and forecast arrays.
-
-    Raises:
-        NotImplementedError: If region is not yet supported.
-        FileNotFoundError: If required processed data files are missing.
-        ValueError: If there is not enough data for the requested horizon.
-    """
+def get_forecast(region: str, horizon_hours: int = 24, db: Session | None = None):
     if region.lower() != "bd":
-        # System architecture §2.1: Only BD is live MVP.
-        raise NotImplementedError(
-            f"Region adapter for '{region}' is an architecture-ready stub. "
-            "Live region is 'bd'."
-        )
-
-    # 1. Load Data
-    nsrdb_path = PROCESSED_DIR / "bangladesh_nsrdb_clean.parquet"
-    carbon_path = PROCESSED_DIR / "bangladesh_carbon_intensity_clean.parquet"
-    gfs_path = PROCESSED_DIR / "bangladesh_gfs_clean.parquet"
-
-    if not nsrdb_path.exists() or not carbon_path.exists():
-        raise FileNotFoundError(
-            "Required processed data not found. Please run data pipeline ingestion first."
-        )
-
-    nsrdb_df = pd.read_parquet(nsrdb_path)
-    carbon_df = pd.read_parquet(carbon_path)
-
-    gfs_df = pd.read_parquet(gfs_path) if gfs_path.exists() else None
-
-    # 2. Build Features
-    features_df = build_features(nsrdb_df, gfs_df)
-
-    # Ensure we have enough data for the horizon
-    if len(features_df) < horizon_hours:
-        raise ValueError("Not enough data to form a forecast horizon.")
-
-    # Get the latest `horizon_hours` rows to act as our forecast base.
-    # For the persistence / LightGBM pattern: we take the last known window
-    # and use it as the feature set for the next `horizon_hours` predictions.
-    current_features = features_df.iloc[-horizon_hours:].copy()
-
-    # Drop raw GHI from the inference feature set to match the training schema.
-    # extract_target() removes GHI during training to prevent data leakage;
-    # we must do the same here or LightGBM will see a different feature count.
-    if isinstance(_forecaster, GBMForecaster) and 'GHI' in current_features.columns:
-        current_features = current_features.drop(columns=['GHI'])
-
-    # 3. Solar Forecast — uses whichever model was loaded at startup
-    solar_pred = _forecaster.predict(current_features)
-
-    # Confidence bands: +/- 15% for baseline/LightGBM MVP
-    solar_upper = solar_pred * 1.15
-    solar_lower = np.maximum(0, solar_pred * 0.85)  # Solar cannot be negative
-
-    # 4. Grid-stress Forecast (Extrapolation of Carbon Intensity)
-    # Simple short-horizon extrapolation of last known value (persistence).
-    # Deliberately kept simple — not oversold per system-arch.md §2.2.
-    last_carbon = carbon_df['carbon_intensity_gco2eq_kwh'].iloc[-1]
-    carbon_pred = np.full(horizon_hours, last_carbon)
-
-    # 5. Prepare timestamps — hourly steps from the last known timestamp
-    last_timestamp = features_df.index[-1]
-    future_timestamps = [last_timestamp + pd.Timedelta(hours=i + 1) for i in range(horizon_hours)]
-
-    return {
-        "region": region,
-        "horizon_hours": horizon_hours,
-        "accuracy": _accuracy,
-        "forecast": {
-            "timestamps": [t.isoformat() for t in future_timestamps],
-            "solar_ghi_w_m2": solar_pred.tolist(),
-            "solar_ghi_lower": solar_lower.tolist(),
-            "solar_ghi_upper": solar_upper.tolist(),
-            "grid_stress_gco2_kwh": carbon_pred.tolist()
-        }
-    }
-
+        raise NotImplementedError(f"Region '{region}' is architecture-ready only; live demo region is bd")
+    if isinstance(horizon_hours, bool) or not isinstance(horizon_hours, int) or not 1 <= horizon_hours <= 24:
+        raise ValueError("horizon_hours must be an integer from 1 to 24")
+    nsrdb_path = PROCESSED_DIR/"bangladesh_nsrdb_clean.parquet"
+    if not nsrdb_path.exists():
+        raise FileNotFoundError("Solar data missing; run the NSRDB pipeline")
+    solar = pd.read_parquet(nsrdb_path)
+    weather_path = PROCESSED_DIR/"bangladesh_gfs_clean.parquet"
+    weather = pd.read_parquet(weather_path) if weather_path.exists() else None
+    features = build_features(solar, weather)
+    if len(features) < FORECAST_LEAD_HOURS:
+        raise ValueError("At least 24 complete hourly feature rows are required")
+    # Predict the same fixed 24-hour window for every horizon, then slice.
+    last = features.index[-1]
+    origins = pd.date_range(last-pd.Timedelta(hours=23), periods=24, freq="h")
+    current = features.reindex(origins)
+    if current.GHI.isna().any():
+        raise ValueError("Latest solar observation window contains gaps")
+    timestamps = origins+pd.Timedelta(hours=FORECAST_LEAD_HOURS)
+    forecaster, accuracy = _forecaster, dict(_accuracy)
+    if weather is None and isinstance(forecaster, GBMForecaster):
+        forecaster = PersistenceForecaster().fit(None, None)
+        accuracy = _baseline_accuracy(_accuracy, "GFS file missing; using compatible persistence model")
+    try:
+        predictions = forecaster.predict(current)
+    except ValueError as exc:
+        forecaster = PersistenceForecaster().fit(None, None)
+        accuracy = _baseline_accuracy(_accuracy, str(exc))
+        predictions = forecaster.predict(current)
+    values = physical_solar(predictions, timestamps)[:horizon_hours]
+    carbon, carbon_meta = carbon_signal(region, PROCESSED_DIR/"bangladesh_carbon_intensity_clean.parquet", db)
+    return {"region": region.lower(), "horizon_hours": horizon_hours, "accuracy": accuracy,
+        "data_quality": {"solar_mode": "historical_demo", "solar_last_observation": last.isoformat(),
+            "solar_location": {"latitude": 24.34, "longitude": 90.07},
+            "interval_method": "Fixed +/-15 percent heuristic", "carbon": carbon_meta,
+            "time_basis_note": "Historical solar scenario; carbon reading time is reported separately",
+            "weather_available": bool(current[GFS_COLUMNS].notna().any().any()),
+            "weather_file_present": weather is not None,
+            "weather_max_age_hours": 24},
+        "forecast": {"timestamps": [t.isoformat() for t in timestamps[:horizon_hours]],
+            "solar_ghi_w_m2": values.tolist(), "solar_ghi_lower": (values*0.85).tolist(),
+            "solar_ghi_upper": (values*1.15).tolist(), "grid_stress_gco2_kwh": [carbon]*horizon_hours}}
 
 @router.get("/{region}")
-def forecast_endpoint(
-    region: str,
-    horizon_hours: int = Query(24, description="Hours ahead to forecast"),
+def forecast_endpoint(region: str, horizon_hours: int = Query(24, ge=1, le=24),
     _user=Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
-) -> Dict[str, Any]:
-    """
-    FastAPI route — delegates to get_forecast() and converts domain errors to HTTP responses.
-    Requires a valid JWT (any role: facility_manager, grid_operator, admin).
-    """
+    db: Session = Depends(get_db)):
     try:
-        return get_forecast(region=region, horizon_hours=horizon_hours)
-    except NotImplementedError as e:
-        raise HTTPException(status_code=501, detail=str(e))
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return get_forecast(region, horizon_hours, db)
+    except NotImplementedError as exc:
+        raise HTTPException(501, detail=str(exc)) from exc
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(503, detail=str(exc)) from exc

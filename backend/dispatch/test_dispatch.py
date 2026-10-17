@@ -1,4 +1,4 @@
-from dispatch.solver import solve_process_schedule
+from backend.dispatch.solver import solve_process_schedule
 
 
 def test_process_schedule():

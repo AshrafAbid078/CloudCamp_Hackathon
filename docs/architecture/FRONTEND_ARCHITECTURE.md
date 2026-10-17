@@ -198,11 +198,19 @@ frontend/
 
 - **Base URL / CORS:** API runs on `http://localhost:8000`. CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` by default; change via `CORS_ORIGINS` in `.env`.
 - **Auth:** `POST /auth/login` returns `access_token`, `role`, `must_change_password`. Send `Authorization: Bearer <token>`.
-- **`must_change_password` is a flag only.** The API does not block other endpoints until the password is changed — the frontend must route the user to `PUT /auth/me/password` when it is `true`.
+- **Password change is enforced.** When `must_change_password` is true, profile and password-change routes remain available; forecast, dispatch and admin operations return 403. Send `current_password` and `new_password` to `PUT /auth/me/password`, then log in again because previous tokens are revoked.
 - **Dispatch KPIs** (`GET /dispatch/plan` → `plan.kpis`): `cost_saved_usd`, `co2_saved_kg` (also `emissions_saved_gco2`), `peak_baseline_kw`, `peak_optimized_kw`, `peak_shaved_kw`. A negative `peak_shaved_kw` means the optimized plan raised the system peak. Per-asset deltas are in `plan.industrial[]` and `plan.batteries[]`.
 - **`GET /dispatch/history`** (grid_operator/admin only) returns the same three KPIs per run for trend charts.
 - **Forecast timestamps** follow the cached dataset's tail (2020), not the current time — label charts accordingly. Confidence band is a fixed ±15%; grid-stress is a flat persistence line.
-- **Prices** are a placeholder TOU tariff in USD/kWh.
+- **Prices** are a placeholder TOU tariff in USD/kWh, indexed in `Asia/Dhaka`. ISO response timestamps remain UTC.
+- **Supported horizons:** integer 1–24 for forecast and dispatch; out-of-range requests return 422. Short forecasts are prefixes of the 24-hour output. Only `bd` is supported; unsupported regions return 501.
+- **Forecast metadata:** `accuracy` includes model, RMSE, MAE, MAPE (fraction), both benchmark scores, training date, split details and target counts. `data_quality` identifies historical solar, coordinates, weather availability/expiry and carbon source/time/age/estimated/stale/fallback status. Missing GFS uses the persistence fallback; unavailable required data returns 503.
+- **Carbon:** latest valid BD database reading no older than `CARBON_MAX_AGE_HOURS` (default 48), else the static cache. Historical solar and current carbon are a mixed-time demo scenario; display their timestamps separately. Carbon is gCO2eq/kWh, not a congestion percentage.
+- **Dispatch indices:** `baseline_hours`, `optimized_hours` and battery `hour` are zero-based positions in `forecast_used.timestamps`. Industrial and battery entries include `constraints`; `assets` lists excluded processes and the reason. All five batteries are returned. Industrial windows are converted from daily Bangladesh clock time to relative slots.
+- **Dispatch assumptions:** `plan.assumptions` and `plan.grid_import_kw` describe sequential optimization and modeled grid imports. Battery exports and solar offsets are disabled; terminal SOC is preserved. `interruptible=false` enforces continuous process operation. KPI deltas retain their signs.
+- **Generation creates history:** each `GET /dispatch/plan` call solves and inserts a new row. Invoke explicitly; avoid background auto-refetch when no new run was requested. History stores summary values, not full saved schedules.
+- **Not implemented:** manual override/approval persistence, copilot, what-if, streaming, facility ownership, asset editing and live solar/weather ingestion. Keep these UI actions disabled or clearly labeled as demos. `/health` is liveness, not data-readiness.
+- **Swagger:** call JSON `/auth/login`, then paste `access_token` into Authorize. Roles are `admin`, `grid_operator`, and `facility_manager`; use the actual `/auth/me` profile for authorization.
 
 ---
 

@@ -2,7 +2,7 @@
 poller/scheduler.py — APScheduler Background Job Manager
 =========================================================
 Registers the Electricity Maps poller as a recurring background job
-using APScheduler's AsyncIOScheduler.
+using APScheduler's BackgroundScheduler.
 
 Integration with FastAPI lifespan (in main.py):
 
@@ -24,12 +24,12 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from config import settings
-from poller.electricity_maps import poll_carbon_intensity
+from backend.config import settings
+from backend.poller.electricity_maps import poll_carbon_intensity
 
 logger = logging.getLogger(__name__)
 
-_scheduler = BackgroundScheduler(timezone="UTC")
+_scheduler = None
 
 
 def _poll_job() -> None:
@@ -51,10 +51,13 @@ def start_scheduler() -> None:
     Start the background scheduler and register the poller job.
     Safe to call multiple times — checks if already running first.
     """
-    if _scheduler.running:
+    global _scheduler
+    if _scheduler is not None and _scheduler.running:
         logger.debug("[Scheduler] Already running — skipping start.")
         return
 
+    # A shut-down scheduler's executor cannot be reused on the next lifespan.
+    _scheduler = BackgroundScheduler(timezone="UTC")
     _scheduler.add_job(
         _poll_job,
         trigger=IntervalTrigger(hours=settings.poll_interval_hours, timezone="UTC"),
@@ -76,6 +79,8 @@ def start_scheduler() -> None:
 
 def stop_scheduler() -> None:
     """Gracefully shut down the scheduler on server exit."""
-    if _scheduler.running:
-        _scheduler.shutdown(wait=False)
+    global _scheduler
+    scheduler, _scheduler = _scheduler, None
+    if scheduler is not None and scheduler.running:
+        scheduler.shutdown(wait=True)
         logger.info("[Scheduler] Stopped.")

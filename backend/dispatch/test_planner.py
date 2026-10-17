@@ -1,9 +1,9 @@
-from dispatch.adapters import (
+from backend.dispatch.adapters import (
     IndustrialProcessAdapter,
     BatteryAdapter,
 )
 
-from dispatch.planner import dispatch_plan
+from backend.dispatch.planner import dispatch_plan
 
 
 def test_dispatch_plan():

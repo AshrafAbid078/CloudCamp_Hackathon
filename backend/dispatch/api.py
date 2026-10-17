@@ -18,26 +18,27 @@ operates on the same signal the frontend and copilot will see.
 """
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from dispatch.adapters import IndustrialProcessAdapter, BatteryAdapter
-from dispatch.planner import dispatch_plan
+from backend.dispatch.adapters import IndustrialProcessAdapter, BatteryAdapter
+from backend.dispatch.planner import dispatch_plan
 
 # ---------------------------------------------------------------------------
 # Phase 2 forecast — imported here to wire the two phases together.
 # ---------------------------------------------------------------------------
-from forecasting.router import get_forecast
+from backend.forecasting.router import get_forecast
 
 # ---------------------------------------------------------------------------
 # Auth & DB
 # ---------------------------------------------------------------------------
-from auth.utils import get_current_user, require_role
-from db.database import get_db
-from db.models import DispatchRun, User, UserRole
+from backend.auth.utils import get_current_user, require_role
+from backend.db.database import get_db
+from backend.db.models import DispatchRun, User, UserRole
 
 router = APIRouter(
     prefix="/dispatch",
@@ -88,6 +89,7 @@ def _load_tariff() -> dict:
 
 
 _TARIFF: dict = _load_tariff()
+_TARIFF_TIMEZONE = "Asia/Dhaka"
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +117,7 @@ def _load_process_adapters() -> list[IndustrialProcessAdapter]:
                 earliest_start=int(row["earliest_start"]),
                 deadline=int(row["deadline"]),
                 duration=int(row["duration"]),
+                interruptible=bool(row.get("interruptible", True)),
             )
         )
     return adapters
@@ -150,15 +153,31 @@ _ALL_BATTERIES: list[BatteryAdapter] = _load_battery_adapters()
 
 # ---------------------------------------------------------------------------
 # Helper: filter assets whose shift window fits inside the requested horizon.
-# A process can only be scheduled if its deadline ≤ the horizon length.
+# Clip feasible local operating windows to the returned forecast timeline.
 # A battery can always run over any horizon.
 # ---------------------------------------------------------------------------
 
 def _filter_processes(
     processes: list[IndustrialProcessAdapter],
     hours: int,
+    timestamps: list[str] | None = None,
 ) -> list[IndustrialProcessAdapter]:
-    return [p for p in processes if p.deadline <= hours and p.duration <= hours]
+    if timestamps is None:
+        return [replace(p, deadline=min(p.deadline, hours)) for p in processes
+                if min(p.deadline, hours)-p.earliest_start >= p.duration]
+    local = pd.DatetimeIndex(pd.to_datetime(timestamps, utc=True)).tz_convert(_TARIFF_TIMEZONE)
+    selected = []
+    for process in processes:
+        # Source windows are daily local clock hours. Solver indices are relative
+        # to the returned UTC timeline; choose the first feasible daily window.
+        for day in local.normalize().unique():
+            start = day + pd.Timedelta(hours=process.earliest_start)
+            end = day + pd.Timedelta(hours=process.deadline)
+            slots = [i for i, ts in enumerate(local) if start <= ts < end]
+            if len(slots) >= process.duration:
+                selected.append(replace(process, earliest_start=slots[0], deadline=slots[-1]+1))
+                break
+    return selected
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +222,7 @@ def get_dispatch_plan(
         # ----------------------------------------------------------
         # Step 1: Get the real forecast from Phase 2
         # ----------------------------------------------------------
-        forecast_data = get_forecast(region=region, horizon_hours=hours)
+        forecast_data = get_forecast(region=region, horizon_hours=hours, db=db)
         forecast = forecast_data["forecast"]
 
         timestamps = forecast["timestamps"]           # ISO strings
@@ -214,13 +233,13 @@ def get_dispatch_plan(
         # ----------------------------------------------------------
         prices = []
         for ts in timestamps:
-            hour = pd.Timestamp(ts).hour
+            hour = pd.Timestamp(ts).tz_convert(_TARIFF_TIMEZONE).hour
             prices.append(_TARIFF.get(hour, 0.10))
 
         # ----------------------------------------------------------
         # Step 3: Filter assets that fit inside the horizon
         # ----------------------------------------------------------
-        processes = _filter_processes(_ALL_PROCESSES, hours)
+        processes = _filter_processes(_ALL_PROCESSES, hours, timestamps)
         batteries = _ALL_BATTERIES
 
         if not processes and not batteries:
@@ -271,6 +290,9 @@ def get_dispatch_plan(
             "forecast_used": {
                 "model": forecast_data["accuracy"]["model"],
                 "accuracy": forecast_data["accuracy"],
+                "data_quality": forecast_data.get("data_quality", {}),
+                "tariff_timezone": _TARIFF_TIMEZONE,
+                "tariff_source": "synthetic_placeholder_usd_kwh",
                 "timestamps": timestamps,
                 "prices_usd_kwh": prices,
                 "carbon_intensity_gco2_kwh": carbon_intensity,
@@ -278,6 +300,9 @@ def get_dispatch_plan(
             "assets": {
                 "industrial_count": len(processes),
                 "battery_count": len(batteries),
+                "excluded_industrial_ids": [p.asset_id for p in _ALL_PROCESSES if p.asset_id not in {a.asset_id for a in processes}],
+                "exclusion_reason": "Not enough hours in a local operating window within the requested horizon",
+                "schedule_index_basis": "Zero-based indices into forecast_used.timestamps",
             },
             "plan": plan,
         }

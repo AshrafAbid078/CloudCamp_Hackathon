@@ -15,11 +15,11 @@ Role hierarchy enforced via require_role() from auth.utils.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from config import settings
-from db.database import get_db
-from db.models import User, UserRole
-from auth.schemas import LoginRequest, PasswordChange, Token, UserCreate, UserOut
-from auth.utils import (
+from backend.config import settings
+from backend.db.database import get_db
+from backend.db.models import User, UserRole
+from backend.auth.schemas import LoginRequest, PasswordChange, Token, UserCreate, UserOut
+from backend.auth.utils import (
     create_access_token,
     get_current_user,
     hash_password,
@@ -60,7 +60,10 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
             detail="Account is deactivated. Contact an administrator.",
         )
 
-    token = create_access_token({"sub": user.username, "role": user.role.value})
+    if not user.hashed_password.startswith("scrypt$"):
+        user.hashed_password = hash_password(body.password)
+        db.commit()
+    token = create_access_token({"sub": user.username, "role": user.role.value, "ver": user.token_version})
     return Token(
         access_token=token,
         token_type="bearer",
@@ -103,6 +106,7 @@ def change_password(
 
     current_user.hashed_password = hash_password(body.new_password)
     current_user.must_change_password = False
+    current_user.token_version += 1
     db.commit()
     return {"detail": "Password updated successfully."}
 

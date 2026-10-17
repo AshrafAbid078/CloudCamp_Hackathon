@@ -1,9 +1,9 @@
-from auth.utils import hash_password, verify_password
+from backend.auth.utils import hash_password, verify_password
 
 
 def test_hash_and_verify_roundtrip():
     h = hash_password("admin123")
-    assert h.startswith("$2")
+    assert h.startswith("scrypt$")
     assert verify_password("admin123", h)
     assert not verify_password("wrong", h)
 

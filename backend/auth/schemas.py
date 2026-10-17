@@ -8,7 +8,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from db.models import UserRole
+from backend.db.models import UserRole
 
 
 # ------------------------------------------------------------------ #
@@ -17,7 +17,7 @@ from db.models import UserRole
 
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=64)
-    password: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1, max_length=128)
 
     model_config = {"json_schema_extra": {"example": {"username": "admin", "password": "admin123"}}}
 
@@ -41,7 +41,7 @@ class UserCreate(BaseModel):
 
 class PasswordChange(BaseModel):
     """Used by PUT /auth/me/password — current user changes their own password."""
-    current_password: str = Field(..., min_length=1)
+    current_password: str = Field(..., min_length=1, max_length=128)
     new_password: str = Field(..., min_length=8, max_length=128)
 
 
@@ -73,3 +73,4 @@ class TokenData(BaseModel):
     """Claims decoded from a valid JWT."""
     username: Optional[str] = None
     role: Optional[UserRole] = None
+    version: int = 0

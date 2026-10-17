@@ -13,7 +13,7 @@ The project is built as a monorepo. Agents must adhere to this structure:
 
 ```text
 CloudCamp/
-├── backend/                  # [IMPLEMENTED] Python 3.11, FastAPI
+├── backend/                  # [IMPLEMENTED] Python/FastAPI (verified Python 3.14.7)
 │   ├── config.py             # Pydantic-settings: all env config (.env → Settings)
 │   ├── main.py               # Unified FastAPI app — mounts all routers, runs lifespan
 │   ├── requirements.txt      # All backend dependencies
@@ -120,8 +120,8 @@ APScheduler `BackgroundScheduler` runs `poll_carbon_intensity()` every `POLL_INT
 
 The architecture generalizes via two adapter axes.
 
-1. **RegionAdapter:**
-   - **Live:** `BDAdapter` (Bangladesh)
+1. **Region routing:**
+   - **Implemented:** explicit BD routing in the forecast function. `RegionAdapter` / `BDAdapter` remain planned
    - **Stubs:** `EUAdapter`, `USAdapter`
 2. **AssetAdapter:**
    - **Live:** `IndustrialProcessAdapter`, `BatteryAdapter`

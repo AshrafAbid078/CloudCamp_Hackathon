@@ -14,6 +14,13 @@ Run with:
 Then visit http://localhost:8000/docs for the interactive API explorer.
 """
 
+import sys
+from pathlib import Path
+
+# Preserve `cd backend; uvicorn main:app` while using one canonical package.
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import logging
 from contextlib import asynccontextmanager
 
@@ -21,14 +28,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from config import settings
-from db.database import SessionLocal, init_db
-from db.models import User, UserRole
-from auth.utils import hash_password
-from auth.router import router as auth_router
-from forecasting.router import router as forecast_router
-from dispatch.api import router as dispatch_router
-from poller.scheduler import start_scheduler, stop_scheduler
+from backend.config import settings
+from backend.db.database import SessionLocal, init_db
+from backend.db.models import User, UserRole
+from backend.auth.utils import hash_password
+from backend.auth.router import router as auth_router
+from backend.forecasting.router import router as forecast_router
+from backend.dispatch.api import router as dispatch_router
+from backend.poller.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -45,14 +52,23 @@ def _seed_admin(db: Session) -> None:
         password: admin123
         must_change_password: True
 
-    The must_change_password flag is True so the operator is reminded
+    The must_change_password flag is enforced so the operator is required
     to change the password via PUT /auth/me/password on first login.
     """
     count = db.query(User).count()
     if count == 0:
+        password = settings.bootstrap_admin_password
+        if not password:
+            if settings.environment == "production":
+                raise RuntimeError("Set BOOTSTRAP_ADMIN_PASSWORD to initialize an empty production database.")
+            password = "admin123"
+        if len(password) < 8 or len(password) > 128:
+            raise ValueError("BOOTSTRAP_ADMIN_PASSWORD must contain 8–128 characters.")
+        if settings.environment == "production" and password == "admin123":
+            raise ValueError("Production cannot use the development bootstrap password.")
         admin = User(
             username="admin",
-            hashed_password=hash_password("admin123"),
+            hashed_password=hash_password(password),
             role=UserRole.admin,
             must_change_password=True,
             is_active=True,
@@ -60,8 +76,7 @@ def _seed_admin(db: Session) -> None:
         db.add(admin)
         db.commit()
         logger.warning(
-            "🔐 Default admin seeded (username=admin, password=admin123). "
-            "CHANGE THIS PASSWORD immediately via PUT /auth/me/password."
+            "Bootstrap admin created. Password change required via PUT /auth/me/password."
         )
 
 
@@ -73,7 +88,7 @@ async def lifespan(app: FastAPI):
     """
     # ---- Startup ----
     logger.info("Initialising database...")
-    init_db()                          # create tables if they don't exist
+    init_db()                          # migrate schema without dropping existing rows
 
     db = SessionLocal()
     try:
@@ -85,11 +100,11 @@ async def lifespan(app: FastAPI):
     start_scheduler()                  # begin Electricity Maps polling
 
     logger.info("✅ Meridian Grid API is ready.")
-    yield
-
-    # ---- Shutdown ----
-    stop_scheduler()
-    logger.info("Meridian Grid API stopped.")
+    try:
+        yield
+    finally:
+        stop_scheduler()
+        logger.info("Meridian Grid API stopped.")
 
 
 # ------------------------------------------------------------------ #
@@ -102,7 +117,7 @@ app = FastAPI(
     description=(
         "AI-powered solar + grid-stress forecasting and "
         "asset dispatch optimization for Bangladesh. "
-        "\n\n**Default credentials (change immediately):** `admin` / `admin123`"
+        "\n\nLog in with JSON at /auth/login, then paste access_token into Authorize."
     ),
     lifespan=lifespan,
 )

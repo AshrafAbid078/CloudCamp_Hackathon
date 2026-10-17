@@ -14,8 +14,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from db.database import Base
-from db.models import CarbonSnapshot, DispatchRun, User, UserRole
+from backend.db.database import Base
+from backend.db.models import CarbonSnapshot, DispatchRun, User, UserRole
 
 
 @pytest.fixture()
@@ -79,7 +79,7 @@ class _FakeResponse:
 
 
 def test_poller_skips_duplicate_reading(session_factory, monkeypatch):
-    from poller import electricity_maps
+    from backend.poller import electricity_maps
 
     payload = {
         "zone": "BD",
@@ -112,7 +112,7 @@ def test_poller_skips_duplicate_reading(session_factory, monkeypatch):
 
 
 def test_seed_admin_only_when_empty(session_factory):
-    import main
+    from backend import main
 
     db = session_factory()
     try:

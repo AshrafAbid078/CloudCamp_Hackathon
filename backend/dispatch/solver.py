@@ -1,5 +1,24 @@
 import pulp
 from pulp import HiGHS
+import math
+from numbers import Real, Integral
+
+
+def _finite(value, name, minimum=None):
+    if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value):
+        raise ValueError(f"{name} must be finite and numeric")
+    if minimum is not None and value < minimum:
+        raise ValueError(f"{name} must be at least {minimum}")
+
+
+def validate_signals(prices, carbon_intensity, carbon_price_per_gco2=0.001):
+    if not prices or len(prices) != len(carbon_intensity):
+        raise ValueError("Prices and carbon_intensity must have the same nonzero length")
+    for value in prices:
+        _finite(value, "price")
+    for value in carbon_intensity:
+        _finite(value, "carbon intensity", 0)
+    _finite(carbon_price_per_gco2, "carbon price", 0)
 
 
 def solve_process_schedule(
@@ -10,6 +29,7 @@ def solve_process_schedule(
     prices: list[float],
     carbon_intensity: list[float],
     carbon_price_per_gco2: float = 0.001,
+    interruptible: bool = True,
 ):
     """
     Optimize an industrial process using both
@@ -19,6 +39,16 @@ def solve_process_schedule(
         cost + carbon_price × emissions
     """
 
+    validate_signals(prices, carbon_intensity, carbon_price_per_gco2)
+    _finite(power_kw, "power_kw", 0)
+    if power_kw == 0:
+        raise ValueError("power_kw must be positive")
+    if any(isinstance(v, bool) or not isinstance(v, Integral) for v in (earliest_start, deadline, duration)):
+        raise ValueError("Start, deadline and duration must be integers")
+    if not 0 <= earliest_start < deadline <= len(prices) or duration <= 0:
+        raise ValueError("Require 0 <= start < deadline <= horizon and positive duration")
+    if type(interruptible) is not bool:
+        raise ValueError("interruptible must be boolean")
     available_slots = range(earliest_start, deadline)
 
     if duration > len(list(available_slots)):
@@ -63,6 +93,12 @@ def solve_process_schedule(
         pulp.lpSum(x[t] for t in available_slots)
         == duration
     )
+    if not interruptible:
+        starts = {t: problem.add_variable(f"start_{t}", cat="Binary")
+                  for t in range(earliest_start, deadline-duration+1)}
+        problem += pulp.lpSum(starts.values()) == 1
+        for t in available_slots:
+            problem += x[t] == pulp.lpSum(starts[s] for s in starts if s <= t < s+duration)
 
     # PuLP 4.x: solve() returns a result object; PULP_CBC_CMD is removed — use HiGHS
     result = problem.solve(HiGHS(msg=False))
@@ -114,6 +150,7 @@ def solve_battery_schedule(
     discharge_efficiency: float = 0.95,
     carbon_price_per_gco2: float = 0.001,
     min_soc: float = 0.10,
+    site_load_kw: list[float] | None = None,
 ):
     """
     Optimize battery charging/discharging using
@@ -137,6 +174,18 @@ def solve_battery_schedule(
                              Prevents full depletion to protect battery longevity.
     """
 
+    validate_signals(prices, carbon_intensity, carbon_price_per_gco2)
+    for name, value in {"capacity_kwh": capacity_kwh, "current_soc": current_soc,
+                        "charge_rate_kw": charge_rate_kw, "discharge_rate_kw": discharge_rate_kw,
+                        "charge_efficiency": charge_efficiency, "discharge_efficiency": discharge_efficiency,
+                        "min_soc": min_soc}.items():
+        _finite(value, name)
+    # Behind-the-meter storage cannot sell energy at the retail import tariff.
+    site_load_kw = [0.0] * len(prices) if site_load_kw is None else site_load_kw
+    if len(site_load_kw) != len(prices):
+        raise ValueError("site_load_kw must match the horizon")
+    for value in site_load_kw:
+        _finite(value, "site_load_kw", 0)
     if not 0 <= current_soc <= 1:
         raise ValueError(
             "current_soc must be between 0 and 1."
@@ -275,6 +324,7 @@ def solve_battery_schedule(
             discharge[t]
             <= discharge_rate_kw * (1 - mode[t])
         )
+        problem += discharge[t] <= site_load_kw[t]
 
     # -------------------------------------------------
     # END AT INITIAL SOC

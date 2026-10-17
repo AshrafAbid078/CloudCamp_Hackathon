@@ -10,6 +10,10 @@ Usage:
 """
 
 from pathlib import Path
+import secrets
+import warnings
+from typing import Literal
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/ and the repository root. Both are searched for a .env file so the
@@ -23,13 +27,15 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     # Security                                                             #
     # ------------------------------------------------------------------ #
-    secret_key: str = "CHANGE_ME_IN_PRODUCTION_USE_32_CHAR_RANDOM_STRING"
-    """JWT signing key. Must be changed before any public deployment."""
+    environment: Literal["development", "production"] = "development"
+    secret_key: str = ""
+    """Persistent JWT key; development generates an ephemeral key if omitted."""
+    bootstrap_admin_password: str = ""
 
-    algorithm: str = "HS256"
+    algorithm: Literal["HS256"] = "HS256"
     """JWT signing algorithm."""
 
-    access_token_expire_minutes: int = 60
+    access_token_expire_minutes: int = Field(default=60, gt=0)
     """JWT lifetime in minutes (default: 1 hour)."""
 
     # ------------------------------------------------------------------ #
@@ -51,11 +57,14 @@ class Settings(BaseSettings):
     Leave empty to disable the poller (server will still start fine).
     """
 
-    poll_interval_hours: int = 24
+    poll_interval_hours: int = Field(default=24, gt=0)
     """How often to poll the Electricity Maps API (default: once per day)."""
 
     poll_region: str = "BD"
     """ISO 3166-1 alpha-2 zone code used by Electricity Maps (Bangladesh = BD)."""
+
+    carbon_max_age_hours: float = Field(default=48, gt=0, allow_inf_nan=False)
+    """Maximum age of a live carbon reading before static fallback is used."""
 
     # ------------------------------------------------------------------ #
     # CORS                                                                 #
@@ -69,6 +78,17 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_security(self):
+        if not self.secret_key or self.secret_key.startswith("CHANGE_ME"):
+            if self.environment == "production":
+                raise ValueError("Production requires an explicitly configured SECRET_KEY.")
+            self.secret_key = secrets.token_urlsafe(48)
+            warnings.warn("Using an ephemeral development JWT key; configure SECRET_KEY to retain logins across restarts.", UserWarning)
+        elif len(self.secret_key.encode("utf-8")) < 32:
+            raise ValueError("SECRET_KEY must contain at least 32 bytes.")
+        return self
 
 
 # Singleton — import this everywhere

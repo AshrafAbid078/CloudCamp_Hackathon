@@ -22,7 +22,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.types import TypeDecorator
 
-from db.database import Base
+from backend.db.database import Base
 
 
 class UTCDateTime(TypeDecorator):
@@ -88,6 +88,7 @@ class User(Base):
     """
 
     is_active = Column(Boolean, default=True, nullable=False)
+    token_version = Column(Integer, default=0, server_default="0", nullable=False)
     """Soft-delete: set False instead of removing the row."""
 
     created_at = Column(
@@ -150,8 +151,7 @@ class DispatchRun(Base):
 class CarbonSnapshot(Base):
     """
     One row per Electricity Maps API poll (default: daily).
-    The forecasting service will eventually use this growing table
-    instead of the static 1-day parquet file.
+    Forecasting prefers fresh valid readings here, then falls back to parquet.
     """
     __tablename__ = "carbon_snapshots"
 

@@ -1,14 +1,15 @@
-from dispatch.adapters import (
+from backend.dispatch.adapters import (
     IndustrialProcessAdapter,
     BatteryAdapter,
 )
 
-from dispatch.solver import (
+from backend.dispatch.solver import (
     solve_process_schedule,
     solve_battery_schedule,
+    validate_signals,
 )
 
-from dispatch.objective import calculate_objective
+from backend.dispatch.objective import calculate_objective
 
 
 # Weights for the combined objective: minimize w1*cost + w2*emissions.
@@ -86,6 +87,7 @@ def calculate_process_optimized(
         prices=prices,
         carbon_intensity=carbon_intensity,
         carbon_price_per_gco2=CARBON_PRICE_PER_GCO2,
+        interruptible=process.interruptible,
     )
 
     return {
@@ -126,6 +128,7 @@ def dispatch_plan(
     carbon_intensity: list[float],
 ):
 
+    validate_signals(prices, carbon_intensity, CARBON_PRICE_PER_GCO2)
     industrial_results = []
     battery_results = []
 
@@ -149,13 +152,13 @@ def dispatch_plan(
 
     for process in industrial_assets:
 
-        baseline = calculate_process_baseline(
+        optimized = calculate_process_optimized(
             process,
             prices,
             carbon_intensity,
         )
 
-        optimized = calculate_process_optimized(
+        baseline = calculate_process_baseline(
             process,
             prices,
             carbon_intensity,
@@ -208,6 +211,7 @@ def dispatch_plan(
                 "asset_id": process.asset_id,
                 "asset_type": "industrial",
                 "name": process.name,
+                "constraints": process.get_constraints(),
 
                 "baseline_hours": baseline["hours"],
                 "optimized_hours": optimized["hours"],
@@ -248,6 +252,7 @@ def dispatch_plan(
             prices=prices,
             carbon_intensity=carbon_intensity,
             carbon_price_per_gco2=CARBON_PRICE_PER_GCO2,
+            site_load_kw=[max(0.0, value) for value in optimized_load_kw],
         )
 
         schedule = optimized["schedule"]
@@ -310,6 +315,7 @@ def dispatch_plan(
             {
                 "asset_id": battery.asset_id,
                 "asset_type": "battery",
+                "constraints": battery.get_constraints(),
 
                 "schedule": schedule,
 
@@ -367,6 +373,10 @@ def dispatch_plan(
     peak_shaved_kw = peak_baseline_kw - peak_optimized_kw
 
     return {
+        "assumptions": {"battery_export_allowed": False, "solar_generation_offset_applied": False,
+                        "asset_dispatch": "Sequential per-asset optimization; no global peak constraint",
+                        "objective": "cost + carbon_price * emissions; individual KPIs may worsen"},
+        "grid_import_kw": {"baseline": baseline_load_kw, "optimized": optimized_load_kw},
         "industrial": industrial_results,
 
         "batteries": battery_results,

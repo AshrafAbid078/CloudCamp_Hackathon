@@ -59,7 +59,7 @@
 - [x] Build the grid-stress forecast as a simple short-horizon extrapolation of the Electricity Maps signal — deliberately kept simple, not oversold.
 - [x] Expose `GET /forecast/{region}?horizon_hours=24` returning solar forecast + grid-stress forecast + confidence band + accuracy number.
 
-**Known limitations (current build):** the grid-stress forecast is persistence (flat); the confidence band is a fixed ±15%; the held-out test set is small (771 rows) and MAPE is worse than persistence (RMSE is better); inference uses the last rows of the cached feature table, so timestamps follow the dataset's tail rather than the current time.
+**Known limitations (current build):** the grid-stress forecast is persistence (flat); the confidence band is a fixed ±15%; the held-out set contains 5,247 hourly targets (2,534 daytime targets), using a purged chronological split and MAPE is worse than persistence (RMSE is better); inference uses the last rows of the cached feature table, so timestamps follow the dataset's tail rather than the current time.
 
 **Verify before moving on:** Does the backtest number reflect a real held-out period, not just training-set accuracy? Does the forecast look sane on a plotted chart (day/night solar cycle visible)?
 
@@ -70,7 +70,8 @@
 **Goal:** Given a forecast, decide when to run flexible processes and charge/discharge the battery to minimize cost + emissions. **[IMPLEMENTED]**
 
 **Tasks:**
-- [x] Define the `RegionAdapter` / `AssetAdapter` protocol classes per `docs/architecture/system-arch.md` §2.1/2.3.
+- [x] Define the `AssetAdapter` protocol and industrial/battery implementations.
+- [ ] Extract BD routing into a `RegionAdapter` / `BDAdapter`; EU/US placeholders currently reject use.
 - [x] Implement `IndustrialProcessAdapter` and `BatteryAdapter` live; `EUAdapter`/`USAdapter`/`EVFleetAdapter` as documented `NotImplementedError` stubs.
 - [x] Formulate the objective: minimize `w1*cost + w2*emissions`, subject to each asset's real constraints (deadline/shift window for processes; SoC/capacity/rate for battery).
 - [x] Implement the MVP solver with PuLP (linear program) — not RL, that's stretch-only.

@@ -1,4 +1,4 @@
-from dispatch.solver import solve_battery_schedule
+from backend.dispatch.solver import solve_battery_schedule
 
 
 def test_battery_schedule():

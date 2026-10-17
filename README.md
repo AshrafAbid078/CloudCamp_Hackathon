@@ -8,7 +8,7 @@ Built for CloudCampBD Congress — Idea to Unicorn (I2U) team track — **ClimaT
 
 An AI engine that forecasts solar output and grid stress, then schedules any flexible energy asset — industrial processes, batteries, EV fleets — into the cheapest, cleanest window, and explains every decision in plain language, for factories and grid operators alike.
 
-> **Build status:** the data pipeline, forecasting, dispatch optimizer, JWT/RBAC auth, and SQLite persistence are implemented and run on cached historical data and synthetic demo facilities. The copilot, dashboard, what-if simulation, and EV fleet adapter are **planned** (see *What it does*). Known limitations are listed below.
+> **Build status:** the data pipeline, forecasting, dispatch optimizer, JWT/RBAC auth, and SQLite persistence are implemented and run on cached historical data and synthetic demo facilities. The frontend UI scaffold exists with mock services; backend integration is pending. Copilot, what-if simulation, and EV fleet support are **planned** (see *What it does*). Known limitations are listed below.
 
 ## The problem
 
@@ -19,10 +19,10 @@ Full structured problem statement: see `docs/product/DESIGN.md` and `docs/produc
 ## What it does
 
 - JWT-secured API with Role-Based Access Control (Admin, Grid Operator, Facility Manager)
-- 6–24h solar irradiance forecast (LightGBM trained on NSRDB 2018–2020, Bangladesh) plus a persistence-based grid-carbon signal; fixed ±15% placeholder band and a backtested accuracy report
+- 1–24h solar irradiance forecast (LightGBM trained on NSRDB 2018–2020, Bangladesh) plus a persistence-based grid-carbon signal; fixed ±15% placeholder band and a backtested accuracy report
 - Dispatch schedule across industrial flexible processes + battery storage (PuLP LP) using TOU price and grid carbon, compared against a start-at-earliest-time baseline on synthetic demo facilities
 - Background auto-polling of live carbon data with SQLite persistence for historical dispatch runs and user management
-- Two pluggable adapter axes (region, asset type); EU/US/EV-fleet adapters are documented stubs, not live
+- Industrial and battery AssetAdapter implementations; BD routing is explicit, with EU/US/EV-fleet stubs. A RegionAdapter protocol is planned
 
 **Planned (not built yet):**
 
@@ -34,13 +34,13 @@ Full structured problem statement: see `docs/product/DESIGN.md` and `docs/produc
 ## Known limitations (current build)
 
 - **Demo data only.** Facilities, batteries, and the TOU tariff are synthetic/placeholder files loaded at start-up; users cannot yet supply their own.
-- **Forecast is a demo forecast.** It runs on a cached historical feature table, so forecast timestamps follow the dataset's tail (2020) rather than the current time. The GFS sample covers only 2020-01 to 2020-05; later rows are forward-filled.
-- **Accuracy is modest.** On the held-out window RMSE is 122 W/m² vs 140 for persistence, but MAPE (0.506) is worse than persistence; the test set is small (771 rows) and the model is untuned.
+- **Forecast is a demo forecast.** It runs on a cached historical feature table, so forecast timestamps follow the dataset's tail (2020) rather than the current time. The GFS sample covers January–May 2020 at daily cadence; joined weather expires after 24 hours. Later weather features remain missing.
+- **Accuracy is modest.** After the timezone/baseline fixes and a purged chronological split, daytime RMSE is 148.95 W/m² vs 192.84 for persistence. MAPE is 74.35% vs 70.08%; there are 2,534 daytime targets across 5,247 held-out hours. LightGBM is selected by RMSE; it is untuned.
 - **Confidence band is a fixed ±15%**, not a statistical interval.
 - **Grid-carbon forecast is persistence** (last known value repeated), and Bangladesh carbon data is an estimated, lower-confidence tier with about one day of history so far.
 - **The solar forecast is not yet an optimizer input.** The optimizer currently schedules on TOU price and grid carbon; with a flat carbon signal it mainly optimizes cost.
 - **Savings figures** are modeled on synthetic facilities against a start-at-earliest-time baseline, not measured at a real site.
-- A default admin account (`admin` / `admin123`) is seeded on first run and flagged `must_change_password`, but the API does not enforce the change; change it before exposing the API.
+- Development seeds `admin` / `admin123` unless `BOOTSTRAP_ADMIN_PASSWORD` is set. Password change is enforced before protected operations; log in again after changing it. Production requires an explicit `SECRET_KEY` and an initial bootstrap password.
 
 ## Architecture at a glance
 
@@ -55,8 +55,8 @@ Full user journey and demo script: see `docs/product/APPLICATION_FLOW.md`.
 
 | Layer | Choice |
 |---|---|
-| Backend | Python 3.11, FastAPI, SQLAlchemy, APScheduler |
-| Auth & DB | JWT (HS256), bcrypt, SQLite |
+| Backend | Python, FastAPI, SQLAlchemy, APScheduler (verified on Python 3.14.7) |
+| Auth & DB | JWT (HS256), scrypt (legacy bcrypt login supported), SQLite/Alembic |
 | Forecasting | LightGBM/GBM (MVP), LSTM/transformer (stretch) |
 | Optimization | PuLP (linear programming) |
 | Copilot (planned) | Local LLM via Ollama, function-calling, role-aware |
@@ -78,14 +78,30 @@ uvicorn main:app --reload
 # backend:  http://localhost:8000
 ```
 
+### Backend checks and model rebuild
+
+From the repository root:
+
+```bash
+python -m pytest -q
+python -m backend.data_pipeline.loaders.nsrdb_loader
+python -m backend.forecasting.train
+python -m alembic -c backend/alembic.ini upgrade head
+python -m uvicorn backend.main:app --reload
+```
+
+Startup runs Alembic automatically. Existing unversioned databases are adopted only when their schema exactly matches the original migration. Back up operational databases before upgrading. The training command does not start/import the API. Native model files must keep LF bytes; `.gitattributes` prevents checkout conversion.
+
+See [the repair checklist](docs/development/BACKEND_AUDIT_2026-10-17.md) and [frontend API notes](docs/architecture/FRONTEND_ARCHITECTURE.md#backend-api-notes-for-frontend-developers) for verified behavior. Forecast responses expose historical/live source times and freshness; dispatch uses Asia/Dhaka windows, reports asset constraints, and disallows battery exports. The optimizer trades off cost and emissions, so individual KPI savings can be negative.
+
 ## Repo structure
 
 ```
-backend/       [Implemented] FastAPI services: data ingestion, forecasting, dispatch (RegionAdapter, AssetAdapter)
+backend/       [Implemented] FastAPI services: data ingestion, forecasting, dispatch (AssetAdapter; BD route)
 data/          [Implemented] Cached NSRDB/GFS samples, synthetic facility+battery generator
 notebooks/     [Implemented] EDA and prototyping
 agent/         [Planned] Copilot function-calling service (role-aware)
-frontend/      [Planned] Next.js dashboard
+frontend/      [UI scaffold] Next.js dashboard; mock services, integration pending
 docs/          [Implemented] Categorized documentation (architecture, product, development, ai-ml, submission, reference)
 prompts/       [Planned] Prompt library (verbatim prompts used to build this) — folder to be added
 ```
@@ -96,7 +112,7 @@ prompts/       [Planned] Prompt library (verbatim prompts used to build this) �
 |---|---|---|---|
 | NREL NSRDB | Public dataset | South/SE Asia (confirmed BD) | Historical cached data (2018–2020) — model training and demo forecast |
 | NOAA GFS | Public dataset | Global | Historical cached sample (2020-01 to 2020-05) — cloud-cover features |
-| Electricity Maps API | Real-time API | Bangladesh zone | Live poll — CO2 intensity + power mix (disclosed as a lower/estimated data tier; history is just starting to accumulate) |
+| Electricity Maps API | Real-time API | Bangladesh zone | Live poll — CO2 intensity; power-mix data is cached only (disclosed as a lower/estimated data tier; history is just starting to accumulate) |
 | Open Power System Data | Public dataset | Europe only | Architecture reference only — not pulled |
 | PJM Data Miner | Public/registered API | US (PJM) only | Architecture reference only — not pulled |
 | Synthetic facility & battery data | Generated | N/A | Used for demo and tests — **no real personal or facility data used anywhere** |

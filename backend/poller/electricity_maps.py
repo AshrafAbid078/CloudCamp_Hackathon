@@ -20,13 +20,14 @@ API reference:
 """
 
 import logging
+import math
 from datetime import datetime, timezone
 
 import requests
 
-from config import settings
-from db.database import SessionLocal
-from db.models import CarbonSnapshot
+from backend.config import settings
+from backend.db.database import SessionLocal
+from backend.db.models import CarbonSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,9 @@ def poll_carbon_intensity(region: str | None = None) -> CarbonSnapshot | None:
     except requests.exceptions.RequestException as exc:
         logger.warning("[Poller] Network error polling Electricity Maps: %s", exc)
         return None
+    except ValueError:
+        logger.warning("[Poller] Upstream response is not valid JSON.")
+        return None
 
     # ---- Parse response --------------------------------------------------
     # Example v3 response:
@@ -94,14 +98,24 @@ def poll_carbon_intensity(region: str | None = None) -> CarbonSnapshot | None:
     #   "estimationMethod": "TIME_SLICER_AVERAGE"
     # }
     try:
+        if not isinstance(data, dict) or data.get("zone", zone) != zone:
+            raise ValueError("Unexpected response zone or payload")
+        if isinstance(data["carbonIntensity"], bool):
+            raise ValueError("Carbon intensity must be numeric")
         carbon_intensity = float(data["carbonIntensity"])
-        is_estimated: bool = bool(data.get("isEstimated", True))
+        if not math.isfinite(carbon_intensity) or carbon_intensity < 0:
+            raise ValueError("Carbon intensity must be finite and nonnegative")
+        is_estimated = data.get("isEstimated", True)
+        if type(is_estimated) is not bool:
+            raise ValueError("isEstimated must be a boolean")
         estimation_method: str | None = data.get("estimationMethod")
 
-        reading_str: str | None = data.get("datetime")
-        reading_dt: datetime | None = None
-        if reading_str:
-            reading_dt = datetime.fromisoformat(reading_str.replace("Z", "+00:00"))
+        reading_str = data["datetime"]
+        if not isinstance(reading_str, str):
+            raise ValueError("Missing reading timestamp")
+        reading_dt = datetime.fromisoformat(reading_str.replace("Z", "+00:00"))
+        if reading_dt.tzinfo is None or reading_dt > datetime.now(timezone.utc):
+            raise ValueError("Reading timestamp must be timezone-aware and not in the future")
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("[Poller] Failed to parse Electricity Maps response: %s | data=%s", exc, data)
         return None

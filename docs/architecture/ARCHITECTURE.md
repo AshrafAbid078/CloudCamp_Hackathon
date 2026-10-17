@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Meridian Grid System Architecture
 
-**Version:** 1.0 | **Last Updated:** 2026-09-19
+**Version:** 1.1 | **Last Updated:** 2026-10-17
 
 ---
 
@@ -26,7 +26,7 @@ Meridian Grid is an AI-powered energy optimization platform for Bangladesh. It p
      ▼               ▼               ▼
 ┌──────────────┐ ┌──────────┐ ┌──────────────────────────┐
 │ NSRDB Loader │ │GFS Loader│ │ poller/electricity_maps   │
-│ (historical) │ │(~17 days)│ │ APScheduler 24h job       │
+│ (historical) │ │(135 days)│ │ APScheduler 24h job       │
 └──────┬───────┘ └────┬─────┘ └──────────┬───────────────┘
        │              │                  │
        │     features.py                 ▼
@@ -77,7 +77,7 @@ Meridian Grid is an AI-powered energy optimization platform for Bangladesh. It p
 | Optimizer | `dispatch/` | Forecast + assets | Schedule + KPIs | Any role | **[IMPLEMENTED]** |
 | Dispatch History | `dispatch/api.py` | DB query | Last N run records | grid_operator+ | **[IMPLEMENTED]** |
 | Copilot Agent | `agent/` | Chat + Role | Grounded answers + tool execution | Any role | **[PLANNED]** |
-| Dashboard | `frontend/` | Next.js App | Visual interface | Any role | **[PLANNED]** |
+| Dashboard | `frontend/` | Next.js App | Visual interface | Any role | **[UI scaffold; integration pending]** |
 
 ---
 
@@ -88,10 +88,11 @@ Meridian Grid is an AI-powered energy optimization platform for Bangladesh. It p
 |---|---|---|
 | `id` | INTEGER PK | Auto-increment |
 | `username` | VARCHAR(64) UNIQUE | Login name |
-| `hashed_password` | VARCHAR(256) | bcrypt |
+| `hashed_password` | VARCHAR(256) | scrypt; legacy short bcrypt passwords upgraded on login |
 | `role` | ENUM | `admin`, `grid_operator`, `facility_manager` |
 | `must_change_password` | BOOLEAN | True for seeded admin |
 | `is_active` | BOOLEAN | False = soft-deleted |
+| `token_version` | INTEGER | Incremented on password change to revoke old tokens |
 | `created_at` | DATETIME(tz) | UTC |
 
 ### `dispatch_runs`
@@ -129,7 +130,7 @@ Meridian Grid is an AI-powered energy optimization platform for Bangladesh. It p
 Client                         API
   │                             │
   │── POST /auth/login ─────────►│
-  │   {username, password}       │  verify bcrypt hash
+  │   {username, password}       │  verify password hash
   │                             │  create JWT (HS256, 60min)
   │◄─ {access_token, role} ─────│
   │                             │
@@ -181,10 +182,10 @@ Client                         API
 ## Running Locally
 
 ```bash
-cd backend/
-
+# From repository root
 # 1. Copy and configure environment
 cp .env.example .env
+cd backend/
 # Edit .env — add SECRET_KEY, ELECTRICITY_MAPS_API_KEY
 
 # 2. Install dependencies
@@ -205,4 +206,4 @@ curl -X POST http://localhost:8000/auth/login \
 pytest -v
 ```
 
-> **First boot:** Tables are created automatically. Default admin (`admin / admin123`) is seeded with `must_change_password=True`. Change via `PUT /auth/me/password`.
+> **First boot:** Alembic upgrades run automatically. Development seeds `admin / admin123` unless overridden with `BOOTSTRAP_ADMIN_PASSWORD`. The API requires changing this password via `PUT /auth/me/password` before forecast, dispatch or admin operations. Then log in again; old tokens are revoked. Set `ENVIRONMENT=production`, a random `SECRET_KEY` of at least 32 bytes, and a bootstrap password for an empty production database. Swagger uses a pasted Bearer token obtained from JSON login.

@@ -1,4 +1,4 @@
-from dispatch.adapters import (
+from backend.dispatch.adapters import (
     IndustrialProcessAdapter,
     BatteryAdapter,
     EVFleetAdapter,

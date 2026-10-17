@@ -3,10 +3,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from auth.utils import get_current_user
-from db.database import Base, get_db
-from db.models import DispatchRun, User, UserRole
-from dispatch.main import app
+from backend.auth.utils import get_current_user
+from backend.db.database import Base, get_db
+from backend.db.models import DispatchRun, User, UserRole
+from backend.dispatch.main import app
 
 # /dispatch/plan requires an authenticated user and a database session.
 # Use an in-memory SQLite DB and a fake admin user so the test is self-contained.
