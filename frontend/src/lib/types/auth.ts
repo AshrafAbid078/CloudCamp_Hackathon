@@ -46,3 +46,18 @@ export interface RolePermission {
   canExportData: boolean;
   canRunWhatIf: boolean;
 }
+
+export interface AdminUserRecord {
+  id: number;
+  username: string;
+  role: UserRole;
+  must_change_password: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AdminCreateUserRequest {
+  username: string;
+  password: string;
+  role: UserRole;
+}

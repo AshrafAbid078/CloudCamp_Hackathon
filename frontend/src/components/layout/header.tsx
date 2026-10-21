@@ -56,7 +56,7 @@ const PATH_TITLES: Record<string, { title: string; subtitle: string }> = {
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { setRole, isFacilityManager, isGridOperator } = useRole();
+  const { setRole, isFacilityManager, isGridOperator, isAdmin, role } = useRole();
   const { isSidebarOpen, toggleSidebar } = useRoleStore();
   const { user, logout } = useAuthStore();
 
@@ -197,7 +197,7 @@ export function Header() {
             whileTap={{ scale: 0.96 }}
             onClick={() => setRole('facility_manager')}
             className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              isFacilityManager
+              role === 'facility_manager'
                 ? 'bg-[var(--accent-solar)] text-[var(--bg-base)] shadow-xs font-bold'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
@@ -210,7 +210,7 @@ export function Header() {
             whileTap={{ scale: 0.96 }}
             onClick={() => setRole('grid_operator')}
             className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              isGridOperator
+              role === 'grid_operator'
                 ? 'bg-[var(--accent-clean)] text-[var(--bg-base)] shadow-xs font-bold'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
@@ -219,6 +219,21 @@ export function Header() {
             <span>🏭</span>
             <span className="hidden sm:inline">Operator</span>
           </motion.button>
+          {(isAdmin || user?.role === 'admin') && (
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              onClick={() => setRole('admin')}
+              className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                role === 'admin'
+                  ? 'bg-amber-500 text-[var(--bg-base)] shadow-xs font-bold'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              title="Switch to Administrator perspective"
+            >
+              <span>🛡️</span>
+              <span className="hidden sm:inline">Admin</span>
+            </motion.button>
+          )}
         </div>
 
         {/* Slide-over Copilot Pill Trigger */}

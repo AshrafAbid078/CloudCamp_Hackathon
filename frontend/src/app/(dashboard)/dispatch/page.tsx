@@ -21,6 +21,7 @@ import type {
   OptimizationRunHistory,
 } from '@/lib/types';
 import { useRole } from '@/hooks';
+import { useRoleStore } from '@/lib/store/useRoleStore';
 
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
@@ -44,6 +45,9 @@ const itemVariants: Variants = {
 
 export default function DispatchPlanPage() {
   const { isGridOperator } = useRole();
+  const { forecastHorizon, setForecastHorizon } = useRoleStore();
+  const horizonHours = forecastHorizon === '6h' ? 6 : forecastHorizon === '12h' ? 12 : 24;
+
   const [industrialTracks, setIndustrialTracks] = useState<IndustrialAssetTrack[]>([]);
   const [batteryTrack, setBatteryTrack] = useState<BatteryAssetTrack | null>(null);
   const [evFleetStub, setEvFleetStub] = useState<EvFleetStubAsset | null>(null);
@@ -57,10 +61,10 @@ export default function DispatchPlanPage() {
   const [selectedWindow, setSelectedWindow] = useState('11:30 – 15:00');
   const [notification, setNotification] = useState<string | null>(null);
 
-  const fetchSchedule = async () => {
+  const fetchSchedule = async (hours: number = horizonHours) => {
     setIsLoading(true);
     try {
-      const data = await dispatchApi.getDispatchTracks();
+      const data = await dispatchApi.getDispatchTracks(hours);
       setIndustrialTracks(data.industrialTracks);
       setBatteryTrack(data.batteryTrack);
       setEvFleetStub(data.evFleetStub);
@@ -75,7 +79,7 @@ export default function DispatchPlanPage() {
     async function init() {
       setIsLoading(true);
       try {
-        const data = await dispatchApi.getDispatchTracks();
+        const data = await dispatchApi.getDispatchTracks(horizonHours);
         if (isMounted) {
           setIndustrialTracks(data.industrialTracks);
           setBatteryTrack(data.batteryTrack);
@@ -90,7 +94,7 @@ export default function DispatchPlanPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [horizonHours]);
 
   const handleOpenOverride = (trackId: string, trackName: string, window: string) => {
     setSelectedAssetId(trackId);
@@ -102,7 +106,7 @@ export default function DispatchPlanPage() {
   const handleOverrideSuccess = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 6000);
-    fetchSchedule();
+    fetchSchedule(horizonHours);
   };
 
   return (
@@ -121,23 +125,41 @@ export default function DispatchPlanPage() {
               <span>Universal Flexible-Load Dispatch Plan</span>
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--accent-clean)]/15 text-[var(--accent-clean)] border border-[var(--accent-clean)]/30">
-              Solver: MILP Converged
+              Solver: PuLP MILP (Live)
             </span>
           </div>
           <p className="text-xs text-[var(--text-muted)] mt-1">
-            Synchronized co-optimization for flexible industrial loads and BESS battery arbitrage against Bangladesh time-of-use tariffs.
+            Live PuLP LP mixed-integer optimization synchronizing flexible industrial loads and battery storage arbitrage against Bangladesh tariffs.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Horizon Switcher (6h, 12h, 24h triggers live re-solve) */}
+          <div className="flex items-center gap-1 p-1 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-hairline)]">
+            {(['6h', '12h', '24h'] as const).map((h) => (
+              <button
+                key={h}
+                onClick={() => setForecastHorizon(h)}
+                className={`text-xs px-3 py-1.5 rounded-xl font-bold font-mono transition-all cursor-pointer ${
+                  forecastHorizon === h
+                    ? 'bg-[var(--accent-solar)] text-[var(--bg-base)] shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                }`}
+                title={`Re-solve PuLP optimizer over ${h} horizon`}
+              >
+                {h}
+              </button>
+            ))}
+          </div>
+
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchSchedule}
+            onClick={() => fetchSchedule(horizonHours)}
             isLoading={isLoading}
             leftIcon={<RotateCw className="w-3.5 h-3.5" />}
           >
-            Re-solve Optimization
+            Re-solve Optimizer
           </Button>
         </div>
       </motion.div>

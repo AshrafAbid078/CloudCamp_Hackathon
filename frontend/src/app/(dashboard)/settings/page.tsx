@@ -15,10 +15,12 @@ import { useRole } from '@/hooks';
 import { systemApi } from '@/lib/api';
 import type { SystemService, AdapterHealthDetail } from '@/lib/types';
 import { useRoleStore } from '@/lib/store/useRoleStore';
+import { AdminConsole } from '@/components/features';
 
 export default function SystemHealthAndSettingsPage() {
-  const { canEditSettings } = useRole();
+  const { canEditSettings, isAdmin } = useRole();
   const { dataConfidence } = useRoleStore();
+  const [activeTab, setActiveTab] = useState<'system' | 'admin'>('system');
   const [services, setServices] = useState<SystemService[]>([]);
   const [adapterDetails, setAdapterDetails] = useState<AdapterHealthDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,25 +68,64 @@ export default function SystemHealthAndSettingsPage() {
           <div className="flex items-center gap-2">
             <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)] font-heading flex items-center gap-2">
               <Sliders className="w-6 h-6 text-[var(--accent-solar)]" />
-              <span>System Health, Adapters & Known Gaps</span>
+              <span>{isAdmin && activeTab === 'admin' ? 'Admin Console & Access Control' : 'System Health, Adapters & Known Gaps'}</span>
             </h2>
           </div>
           <p className="text-xs text-[var(--text-muted)] mt-1">
-            Real-time pipeline diagnostics, Electricity Maps poll timestamps, and pluggable adapter schemas.
+            {isAdmin && activeTab === 'admin'
+              ? 'User authentication management, role assignment, and system operator account controls.'
+              : 'Real-time pipeline diagnostics, Electricity Maps poll timestamps, and pluggable adapter schemas.'}
           </p>
         </div>
 
-        <Chip variant="clean" size="sm" dot>
-          All 5 Pipeline Nodes Operational
+        <Chip variant={isAdmin && activeTab === 'admin' ? 'solar' : 'clean'} size="sm" dot>
+          {isAdmin && activeTab === 'admin' ? 'Admin Role Verified' : 'All 5 Pipeline Nodes Operational'}
         </Chip>
       </div>
 
-      {savedSuccess && (
-        <div className="p-4 rounded-2xl bg-[var(--accent-clean)]/15 border border-[var(--accent-clean)]/30 text-xs text-[var(--accent-clean)] flex items-center gap-2 shadow-sm">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>SCADA safety interlock thresholds saved and broadcast to field Modbus gateways.</span>
+      {/* Admin Console Tab Switcher (Visible strictly when role === 'admin') */}
+      {isAdmin && (
+        <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] w-fit">
+          <button
+            onClick={() => setActiveTab('system')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold font-heading transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'system'
+                ? 'bg-[var(--bg-surface-raised)] text-[var(--accent-solar)] shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Diagnostics & Controls</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('admin')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold font-heading transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'admin'
+                ? 'bg-[var(--accent-solar)] text-[var(--bg-base)] shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Admin Console</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-mono bg-black/20 text-current font-bold uppercase">
+              Role Guarded
+            </span>
+          </button>
         </div>
       )}
+
+      {/* Admin Tab View */}
+      {isAdmin && activeTab === 'admin' ? (
+        <AdminConsole />
+      ) : (
+        <>
+          {savedSuccess && (
+            <div className="p-4 rounded-2xl bg-[var(--accent-clean)]/15 border border-[var(--accent-clean)]/30 text-xs text-[var(--accent-clean)] flex items-center gap-2 shadow-sm">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>SCADA safety interlock thresholds saved and broadcast to field Modbus gateways.</span>
+            </div>
+          )}
 
       {/* Adapter Status Details Section */}
       <div className="p-6 sm:p-8 rounded-3xl bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-lg space-y-4">
@@ -270,6 +311,8 @@ export default function SystemHealthAndSettingsPage() {
           </div>
         </form>
       </div>
+        </>
+      )}
     </div>
   );
 }

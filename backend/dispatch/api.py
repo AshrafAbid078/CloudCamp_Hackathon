@@ -335,3 +335,115 @@ def get_dispatch_history(
             for r in runs
         ],
     }
+
+# ---------------------------------------------------------------------------
+# POST /dispatch/override  (On-Demand PuLP Re-solve)
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel
+from typing import Optional
+
+class ManualOverridePayload(BaseModel):
+    asset_id: str
+    forced_start_hour: int
+    forced_duration: Optional[int] = None
+    horizon_hours: int = 24
+    region: str = "bd"
+
+@router.post("/override", summary="Apply manual schedule override and re-solve with PuLP")
+def submit_dispatch_override(
+    body: ManualOverridePayload,
+    current_user: User = Depends(
+        require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    On-demand schedule override re-solver:
+    Locks an asset to the operator's specified start hour and runs PuLP LP solver
+    across all assets, immediately recomputing system KPIs and logging the run.
+    """
+    try:
+        hours = max(1, min(24, body.horizon_hours))
+        region = body.region
+
+        forecast_data = get_forecast(region=region, horizon_hours=hours)
+        forecast = forecast_data["forecast"]
+        timestamps = forecast["timestamps"]
+        carbon_intensity = forecast["grid_stress_gco2_kwh"]
+
+        prices = []
+        for ts in timestamps:
+            hour = pd.Timestamp(ts).hour
+            prices.append(_TARIFF.get(hour, 0.10))
+
+        # Clone processes and apply override to the targeted asset
+        overridden_processes = []
+        target_found = False
+        for p in _ALL_PROCESSES:
+            if p.asset_id == body.asset_id:
+                target_found = True
+                duration = body.forced_duration or p.duration
+                forced_start = max(0, min(hours - duration, body.forced_start_hour))
+                overridden_p = IndustrialProcessAdapter(
+                    asset_id=p.asset_id,
+                    name=p.name,
+                    power_kw=p.power_kw,
+                    earliest_start=forced_start,
+                    deadline=min(hours, forced_start + duration),
+                    duration=duration,
+                )
+                overridden_processes.append(overridden_p)
+            else:
+                overridden_processes.append(p)
+
+        processes = _filter_processes(overridden_processes, hours)
+        batteries = _ALL_BATTERIES
+
+        plan = dispatch_plan(
+            industrial_assets=processes,
+            battery_assets=batteries,
+            prices=prices,
+            carbon_intensity=carbon_intensity,
+        )
+
+        kpis = plan.get("kpis", {})
+        run = DispatchRun(
+            region=region,
+            hours=hours,
+            industrial_count=len(processes),
+            battery_count=len(batteries),
+            cost_saved_usd=kpis.get("cost_saved_usd"),
+            co2_saved_kg=kpis.get("co2_saved_kg"),
+            peak_shaved_kw=kpis.get("peak_shaved_kw"),
+            model_used=forecast_data["accuracy"].get("model"),
+            triggered_by=f"{current_user.username} [override: {body.asset_id}]",
+        )
+        db.add(run)
+        db.commit()
+
+        return {
+            "status": "success",
+            "region": region,
+            "hours": hours,
+            "run_id": run.id,
+            "override_applied": {
+                "asset_id": body.asset_id,
+                "forced_start_hour": body.forced_start_hour,
+                "found": target_found,
+            },
+            "forecast_used": {
+                "model": forecast_data["accuracy"]["model"],
+                "accuracy": forecast_data["accuracy"],
+                "timestamps": timestamps,
+                "prices_usd_kwh": prices,
+                "carbon_intensity_gco2_kwh": carbon_intensity,
+            },
+            "assets": {
+                "industrial_count": len(processes),
+                "battery_count": len(batteries),
+            },
+            "plan": plan,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

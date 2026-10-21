@@ -144,3 +144,68 @@ def root():
             "meta": ["GET /health"],
         },
     }
+
+
+# ------------------------------------------------------------------ #
+# Data & Provenance routes                                             #
+# ------------------------------------------------------------------ #
+
+from db.models import CarbonSnapshot
+from db.database import get_db
+from fastapi import Query, Depends
+from pathlib import Path
+import pandas as pd
+
+@app.get("/data/carbon-snapshots", tags=["Data"])
+def get_carbon_snapshots(
+    limit: int = Query(default=50, ge=1, le=200, description="Maximum snapshot records to return"),
+    db: Session = Depends(get_db),
+):
+    """
+    Return latest Electricity Maps carbon intensity readings.
+    If the live SQLite table is empty (e.g. before initial poll),
+    returns records seeded from the processed carbon intensity dataset.
+    """
+    snapshots = (
+        db.query(CarbonSnapshot)
+        .order_by(CarbonSnapshot.polled_at.desc())
+        .limit(limit)
+        .all()
+    )
+    if not snapshots:
+        processed_path = Path(__file__).resolve().parent.parent / "data" / "processed" / "bangladesh_carbon_intensity_clean.parquet"
+        if processed_path.exists():
+            df = pd.read_parquet(processed_path)
+            tail = df.tail(limit).iloc[::-1]
+            results = []
+            for idx, row in tail.iterrows():
+                ts = str(idx) if isinstance(idx, (pd.Timestamp, str)) else str(row.get("datetime", ""))
+                results.append({
+                    "id": len(results) + 1,
+                    "polled_at": ts,
+                    "reading_datetime": ts,
+                    "region": "BD",
+                    "carbon_intensity_gco2eq_kwh": float(row.get("carbon_intensity_gco2eq_kwh", 650.0)),
+                    "is_estimated": bool(row.get("is_estimated", True)),
+                    "estimation_method": str(row.get("estimation_method", "MERRA-2 fallback / Electricity Maps")),
+                    "source": "electricity_maps_archive",
+                })
+            return {"count": len(results), "snapshots": results}
+        return {"count": 0, "snapshots": []}
+
+    return {
+        "count": len(snapshots),
+        "snapshots": [
+            {
+                "id": s.id,
+                "polled_at": s.polled_at.isoformat() if s.polled_at else None,
+                "reading_datetime": s.reading_datetime.isoformat() if s.reading_datetime else None,
+                "region": s.region,
+                "carbon_intensity_gco2eq_kwh": s.carbon_intensity_gco2eq_kwh,
+                "is_estimated": s.is_estimated,
+                "estimation_method": s.estimation_method,
+                "source": s.source,
+            }
+            for s in snapshots
+        ],
+    }

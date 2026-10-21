@@ -21,5 +21,6 @@ export function useRole() {
     canRunWhatIf: permissions.canRunWhatIf,
     isFacilityManager: role === 'facility_manager',
     isGridOperator: role === 'grid_operator',
+    isAdmin: role === 'admin',
   };
 }

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 poller/electricity_maps.py — Electricity Maps Live Carbon Intensity Poller
 ===========================================================================

@@ -35,3 +35,21 @@ export interface DataProvenanceRecord {
   recordCount: number;
   syntheticNotice?: string;
 }
+
+export interface CarbonSnapshotRecord {
+  id: number;
+  polled_at: string;
+  reading_datetime: string | null;
+  region: string;
+  carbon_intensity_gco2eq_kwh: number;
+  is_estimated: boolean;
+  estimation_method: string | null;
+  source: string;
+
+  // CamelCase aliases for frontend ergonomics
+  polledAt?: string;
+  readingDatetime?: string | null;
+  carbonIntensityGco2eqKwh?: number;
+  isEstimated?: boolean;
+  estimationMethod?: string | null;
+}

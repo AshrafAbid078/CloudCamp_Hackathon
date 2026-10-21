@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 auth/utils.py — Password Hashing, JWT Signing & FastAPI Dependencies
 =====================================================================

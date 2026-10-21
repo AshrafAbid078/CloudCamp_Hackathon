@@ -1,5 +1,17 @@
 import pulp
 
+def _get_solver():
+    try:
+        import highspy
+        return pulp.HiGHS(msg=False)
+    except Exception:
+        pass
+    try:
+        return pulp.PULP_CBC_CMD(msg=False)
+    except Exception:
+        return pulp.getSolver('PULP_CBC_CMD', msg=False)
+
+
 
 def solve_process_schedule(
     power_kw: float,
@@ -62,9 +74,7 @@ def solve_process_schedule(
         == duration
     )
 
-    problem.solve(
-        pulp.PULP_CBC_CMD(msg=False)
-    )
+    problem.solve(_get_solver())
 
     if pulp.LpStatus[problem.status] != "Optimal":
         raise RuntimeError(
@@ -291,9 +301,7 @@ def solve_battery_schedule(
     # SOLVE
     # -------------------------------------------------
 
-    problem.solve(
-        pulp.PULP_CBC_CMD(msg=False)
-    )
+    problem.solve(_get_solver())
 
     if pulp.LpStatus[problem.status] != "Optimal":
         raise RuntimeError(
