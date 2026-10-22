@@ -1,0 +1,32 @@
+Tool: built-in image generation
+Artifact: dashboard-overview-v1.png
+Purpose: visual design concept; not an implemented frontend.
+
+Use case: ui-mockup.
+Create a single exceptionally polished high-fidelity desktop dashboard UI design for the existing application MERIDIAN GRID, a Bangladesh solar forecasting and flexible-load dispatch tool. This is a visual design concept for approval, not an implementation. Produce a straight-on flat application screenshot, landscape approximately 16:10, high resolution, extremely crisp legible typography. No device frame, no browser chrome, no perspective or decorative background outside the UI.
+
+Art direction: premium, calm engineering console with restrained editorial hierarchy. Near-black blue canvas #0E1B2A, slightly lighter navy panels #152A3F, fine blue borders #26405C, warm off-white typography #F3EFE6 and muted blue-gray #93A3B5. Solar amber #E8A33D for the main action and solar plot, teal #2FA98C for verified savings. Contemporary clean sans typography, large tabular numerals, slender consistent outline icons. Modest 12px corner radii, excellent alignment, generous breathing room, minimal shadows, very subtle chart fills. No excessive glow, gradients, glass effects or sci-fi ornament. Beautiful realistic designed product, clear hierarchy, functional design.
+
+Layout: narrow fixed left navigation, approximately 210 pixels of a 1600px-wide canvas, with the rest as main content. Entire page fits the image without cutoff. Left sidebar top tiny geometric amber grid/sun mark with wordmark "MERIDIAN" and small "GRID". Nav rows "Overview" (selected with subdued amber background and amber left edge), "Forecast", "Dispatch", "Run history", "Data sources", "Settings". Lower separated nav item "Copilot" with small muted "Planned" badge. Sidebar bottom subdued status block "Bangladesh" and "Synthetic asset pool", then small circular AD avatar and "Administrator". No persona toggle or fake notifications.
+
+Main header: small eyebrow "WORKSPACE / BANGLADESH" then large heading "Energy overview" and supporting text "Forecast, schedule and compare your energy use." Top right an outlined date control "01–02 Jan 2021" with tiny "Asia/Dhaka" note. Below title align a muted "Historical demo" pill and "Run #24 · 24-hour scenario". Right side segmented horizon switch "6h  12h  24h", 24h selected, and a prominent warm amber filled button "Generate plan" with a simple arrow/bolt icon. Make this one strongest action.
+
+Thin compact source-status strip below header: small information icon, "Historical solar · Cached carbon · Synthetic assets and tariff", and right-aligned "View provenance →". This is a calm neutral notice, no alarm-heavy warnings.
+
+Next row exactly three equally sized spacious KPI panels:
+1. Small label "Cost saved", large "$481.56", teal small badge "1.55% lower". Bottom baseline comparison in small muted text "Baseline $31,117.36" and "Optimized $30,635.80".
+2. Small label "CO₂ reduction", large "0 kg", neutral badge "Unchanged". Bottom text "No emissions reduction in this run". No green improvement arrow on this card.
+3. Small label "Peak reduction", large "7,543.55 kW", teal badge "14.89% lower". Bottom small text "50,663.85 → 43,120.30 kW".
+Icons understated in upper right corners, no fake sparklines.
+
+Next row two columns, wide solar card about 68% and narrow carbon card 32%.
+Solar card: title "Solar forecast", small pill "LightGBM", right text "Peak 667 W/m²". Small subtitle "Historical scenario · 24 hours". Clean elegant amber line and translucent narrow +/-15% band visibly bounded around it, not filled from the curve to zero. Plot y-axis labeled "GHI · W/m²", ticks 0,200,400,600,800. x-axis evenly spaced local times 06:00,09:00,12:00,15:00,18:00,21:00,00:00,03:00,06:00. Solar curve begins at 0 at 06:00, rises to 353 at09:00, peaks667 at12:00 (one quarter across total 24h plot), declines376 at15:00, reaches0 by18:00 and remainszero throughnight. Subtle night shading on right half. Bottom compact legend amber line "Forecast", pale amber square "±15% heuristic band"; right note "RMSE 148.95 W/m²". Include dates subtly so overnight horizon is clear.
+
+Carbon card: title "Grid carbon", large "625" followed by "gCO₂eq/kWh"; small chips "Estimated" and "Cached". Tiny muted teal horizontal flat line across a small chart, no fake varying curves. Below divider two-column facts: "Source" / "Cached dataset", "Reading time" / "17 Aug 2026, 04:15", "Freshness" / "Stale". Small bottom note "Last known reading repeated across the scenario." This card clearly distinguishes carbon reading date from solar scenario date. No 0–100 stress score, no "Live" green badge.
+
+Bottom row wide dispatch preview panel about68% and compact model/data panel about32%, height sufficient for three readable schedule rows.
+Dispatch panel header "Dispatch preview", supporting "20 industrial processes · 5 batteries", small right link "View full plan →". Timeline labeled "06  09  12  15  18  21  00  03". Left row names "Textile Mill 01", "Cement Kiln 02", "Cement Kiln 03". Thin hour-slot schedule bars in tasteful amber/teal, accurately show separate blocks: Textile Mill 01 scheduled06–07 and09–15; Cement Kiln 02 scheduled06–08 and09–12; Cement Kiln03 scheduled07–17. Tiny pills say "Synthetic". Legend "Scheduled" and "Idle", no implication of solar-powered operation. Lower understated note "Batteries offset site demand · No export assumed".
+Adjacent compact panel title "Model & data", rows "Solar training" / "2018–2020", "Weather" / "Historical cache", "Interval" / "±15% heuristic"; lower divider and short note "Scenario results, not measured facility savings." small outline link "Inspect data sources →".
+
+Keep every data value and key label exact. All numbers are illustrative verified outputs from one backend test run; the whole design carries the Historical demo state. Do not add approve/override controls, live SCADA, solar kWh, imagined revenue, unsupported chat tools, or confident operational claims. Use attractive spacing, balanced whitespace, a coherent grid, very legible text and strong contrast. Output only the finished dashboard image.
+
