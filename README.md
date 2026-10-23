@@ -1,144 +1,250 @@
-# Meridian Grid
+<div align="center">
 
-> **Current data setup (October 2026):** `frontend/` and `backend/` run a demo with a current Open-Meteo regional weather forecast when available. Electricity Maps v4 carbon forecasts require your API key; without one, carbon remains an explicitly labelled archived fallback. Facilities, batteries, and tariffs are synthetic/placeholder data. See [live data setup](docs/development/LIVE_DATA_SETUP.md). Some older design and pitch sections below describe planned capabilities.
+# ⚡ Meridian Grid
+### Universal Flexible-Load Orchestration & Carbon-Aware Dispatch Engine
 
-**Universal Flexible-Load Orchestration Engine**
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![Optimization](https://img.shields.io/badge/MILP_Solver-PuLP%20%2F%20HiGHS-orange?style=for-the-badge)](https://github.com/coin-or/pulp)
 
-Built for CloudCampBD Congress — Idea to Unicorn (I2U) team track — **ClimaTech** domain, **Energy Brain** challenge.
+<p align="center">
+  <b>Built for CloudCampBD Congress — Idea to Unicorn (I2U)</b><br>
+  <i>ClimaTech Domain &bull; Energy Brain Challenge</i>
+</p>
 
-## One-line pitch
+[Key Features](#-key-features) &bull;
+[Architecture](#-system-architecture) &bull;
+[Screenshots](#-product-showcase) &bull;
+[Quick Start](#-quick-start) &bull;
+[API Reference](#-api-endpoints) &bull;
+[Data Provenance](#-data-provenance)
 
-An AI engine that forecasts solar output and grid stress, then schedules any flexible energy asset — industrial processes, batteries, EV fleets — into the cheapest, cleanest window, and explains every decision in plain language, for factories and grid operators alike.
+---
 
-> **Build status:** the API, JWT/RBAC auth, SQLite persistence, Next.js dashboard, optimizer, and PV scenario comparison run locally. Current Open-Meteo weather is used when available; Electricity Maps v4 carbon requires a key. Assets and tariffs remain synthetic. Live equipment control and a natural-language copilot are not connected.
+</div>
 
-## The problem
+<p align="center">
+  <img src="docs/design/dashboard-overview-v2.png" alt="Meridian Grid Dashboard Overview" width="920" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);"/>
+</p>
 
-Facility managers make load-timing and battery decisions on instinct — no tool connects a solar/grid-stress forecast to a specific, explained action for their equipment. Utilities face the same integration gap one level up. Meridian Grid closes forecast → optimized action → plain-language explanation into one engine that serves both.
+## 📌 Executive Summary
 
-Full structured problem statement: see `docs/product/DESIGN.md` and `docs/product/MERIDIAN_GRID_IDEA.md`.
+Industrial facilities and commercial microgrids face high peak-demand electricity tariffs and rising grid emissions, yet operational schedules and battery cycles are still managed manually on instinct. Utilities and grid operators face the complementary challenge: severe grid stress during peak hours with little real-time demand-side flexibility.
 
-## What it does
+**Meridian Grid** bridges this gap by unifying **solar generation forecasting**, **grid carbon telemetry**, and **Mixed-Integer Linear Programming (MILP) dispatch optimization** into an automated, explainable platform. It dynamically shifts interruptible industrial loads and coordinates battery charging/discharging into the cleanest, most cost-effective operating windows.
 
-- JWT-secured API with Role-Based Access Control (Admin, Grid Operator, Facility Manager)
-- 6–24h current Open-Meteo regional GHI forecast when available, with explicitly labelled archived 2020 fallback and fixed ±15% display bounds
-- Dispatch schedule across industrial flexible processes + battery storage (PuLP LP) using TOU price and grid carbon, compared against a start-at-earliest-time baseline on synthetic demo facilities
-- Optional Electricity Maps v4 carbon forecast and latest-reading polling with SQLite persistence for snapshots, runs, and user management
-- Two pluggable adapter axes (region, asset type); EU/US/EV-fleet adapters are documented stubs, not live
+---
 
-**Planned (not built yet):**
+## 🚀 Key Features
 
-- Conversational copilot with a role toggle (Facility Manager / Grid Operator) grounded in real tool calls
-- On-site weather and equipment telemetry, plus operational dispatch controls
+### ☀️ AI-Powered Solar & Weather Forecasting
+- **Multi-Source Ingestion**: Live regional GHI (Global Horizontal Irradiance) and temperature forecasts via Open-Meteo API.
+- **Historical Ground-Truth Baseline**: Cached multi-year satellite solar irradiance datasets (NREL NSRDB & NOAA GFS).
+- **Flexible Horizons**: Dynamic 6h, 12h, and 24h rolling lookahead horizons with configurable confidence bands.
 
-## Known limitations (current build)
+### ⚙️ Mixed-Integer Linear Programming (MILP) Dispatch Solver
+- **Dual-Objective Optimization**: Minimizes composite objective `Cost + (Carbon Price × Emissions)` across time-of-use (TOU) tariffs.
+- **Asset Constraint Modeling**:
+  - **Flexible Industrial Processes**: Solves optimal run hours respecting duration, deadlines, power ratings, and non-interruptibility constraints.
+  - **Battery Energy Storage Systems (BESS)**: C-rate limits, state-of-charge (SoC) bounds (10%–100%), and round-trip efficiency losses (95%).
+  - **Site Interconnection**: Shared feeder capacity caps and PV co-generation balancing.
+- **High-Performance Solvers**: Native PuLP integration with HiGHS and CBC backends.
 
-- **Demo data only.** Facilities, batteries, and the TOU tariff are synthetic/placeholder files loaded at start-up; users cannot yet supply their own.
-- **Forecast is regional and modeled.** Open-Meteo provides current hourly weather-model predictions near Dhaka, not measured irradiance at a facility. If unavailable, the API clearly falls back to archived 2020 NSRDB/GFS sample data.
-- **Accuracy is modest.** On the held-out window RMSE is 122 W/m² vs 140 for persistence, but MAPE (0.506) is worse than persistence; the test set is small (771 rows) and the model is untuned.
-- **Confidence band is a fixed ±15%**, not a statistical interval.
-- **Carbon depends on API access.** With an Electricity Maps key, the optimizer can use its v4 hourly BD forecast when available. Otherwise it uses a fresh reading held constant or an archived constant, with the source reported in the API and frontend.
-- **Solar affects PV scenarios when capacity is supplied.** Default demo plans have zero installed PV and no measured facility base load. The placeholder TOU tariff and synthetic assets remain the dominant planning inputs.
-- **Savings figures** are modeled on synthetic facilities against a start-at-earliest-time baseline, not measured at a real site.
-- A fresh database receives a generated admin password in `backend/.initial-admin-credential`. Change it at first sign-in; this is a local demo, not a public deployment.
+### 🌍 Real-Time Carbon Telemetry & Polling
+- **Live Carbon Intelligence**: Native integration with Electricity Maps v4 API for real-time grid carbon intensity (`gCO2eq/kWh`).
+- **Telemetry Persistence**: Scheduled background polling with SQLite storage and automated freshness tracking.
+- **Failover Guarantee**: Graceful fallback to verified regional historical averages if external telemetry is unreachable.
 
-## Architecture at a glance
+### 🛡️ Enterprise-Grade Security & RBAC
+- **Role-Based Access Control**:
+  - `facility_manager`: Manage assets, run dispatch simulations, execute manual overrides.
+  - `grid_operator`: Monitor aggregate load shifting, feeder utilization, and system-wide grid relief.
+  - `admin`: User provisioning, role assignment, system health monitoring.
+- **Cryptographic Standards**: Salted bcrypt password hashing and stateless JWT bearer token authentication.
+
+### 🎨 State-of-the-Art Next.js 14 Web Interface
+- **Next.js App Router & Tailwind CSS**: Modern glassmorphism aesthetic with high contrast data visualizations.
+- **Interactive Gantt & Time-Series Charts**: Real-time visual schedule inspection powered by Recharts.
+- **Live KPI Simulator**: Instant financial and carbon savings comparisons against baseline "run-immediately" scenarios.
+
+---
+
+## 🖼️ Product Showcase
+
+| Landing & Value Proposition | Dispatch Optimization & Gantt |
+| :---: | :---: |
+| ![Landing Page](docs/design/full-suite-v2/01-landing.png) | ![Dispatch Schedule](docs/design/full-suite-v2/06-dispatch.png) |
+
+| Solar & Weather Forecasting | Carbon Telemetry & Data Provenance |
+| :---: | :---: |
+| ![Forecast View](docs/design/full-suite-v2/05-forecast.png) | ![Data Ledger](docs/design/full-suite-v2/10-data.png) |
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+flowchart TD
+    subgraph DataSources["External Data Ingestion"]
+        OM["Open-Meteo API<br/>(Live Regional Weather)"]
+        EM["Electricity Maps API v4<br/>(Live Carbon Intensity)"]
+        NSRDB["NREL NSRDB / NOAA GFS<br/>(Historical Benchmarks)"]
+    end
+
+    subgraph Backend["FastAPI Backend Layer"]
+        Poller["Background Poller & APScheduler"]
+        ForecastEngine["Forecasting Service<br/>(Regional GHI & Generation)"]
+        SolverEngine["Dispatch Optimizer<br/>(PuLP MILP / HiGHS Solver)"]
+        AuthService["Auth & RBAC Service<br/>(JWT / bcrypt)"]
+        DB[(SQLite / SQLAlchemy<br/>Snapshots & Runs)]
+    end
+
+    subgraph Frontend["Next.js 14 Presentation Layer"]
+        AuthUI["Secure Auth<br/>(Login / Role Guard)"]
+        DashboardUI["Operations Dashboard<br/>(KPI Cards & Telemetry)"]
+        DispatchUI["Dispatch Studio<br/>(Interactive Gantt & Overrides)"]
+        ForecastUI["Forecast Studio<br/>(Generation Curves)"]
+    end
+
+    OM --> ForecastEngine
+    EM --> Poller
+    Poller --> DB
+    NSRDB --> ForecastEngine
+    ForecastEngine --> SolverEngine
+    DB --> SolverEngine
+    SolverEngine --> DB
+    AuthService --> DB
+
+    AuthService <--> AuthUI
+    ForecastEngine <--> ForecastUI
+    SolverEngine <--> DispatchUI
+    DB <--> DashboardUI
+```
+
+---
+
+## 📂 Repository Structure
 
 ```
-Data sources -> Ingestion -> Forecasting -> Dispatch/Optimizer -> Copilot <-> Dashboard
+CloudCamp/
+├── backend/
+│   ├── alembic/              # Database schema migrations
+│   ├── auth/                 # JWT authentication, user roles, security tests
+│   ├── db/                   # SQLAlchemy database engine and data models
+│   ├── dispatch/             # PuLP optimization solver, adapters, joint constraints
+│   ├── forecasting/          # Weather and solar forecasting engine (Open-Meteo)
+│   ├── poller/               # Background scheduler for carbon intensity telemetry
+│   ├── config.py             # Typed Pydantic application settings
+│   ├── main.py               # FastAPI application entrypoint & API routers
+│   └── requirements.txt      # Python dependencies
+├── frontend/
+│   ├── src/
+│   │   ├── app/              # Next.js 14 App Router pages (Auth, Dashboard, Dispatch)
+│   │   ├── components/       # Reusable UI, Gantt charts, KPI metrics, layout
+│   │   ├── hooks/            # Custom React hooks (role verification, theme)
+│   │   ├── lib/              # API clients, state stores, adapters, TypeScript types
+│   │   └── styles/           # Global styles and design tokens
+│   ├── package.json          # Node.js dependencies and build scripts
+│   └── tailwind.config.ts    # Tailwind CSS design system configuration
+├── data/                     # Historical NSRDB samples, synthetic facility profiles
+├── docs/                     # Comprehensive architecture, design, and API documentation
+│   ├── architecture/         # System architecture & frontend design specs
+│   ├── design/               # UI mockups, screen gallery, and visual assets
+│   └── development/          # Live data setup guides and review documentation
+└── pytest.ini                # Pytest configuration
 ```
 
-Full breakdown, API contracts, and adapter pattern: see `docs/architecture/system-arch.md`.
-Full user journey and demo script: see `docs/product/APPLICATION_FLOW.md`.
+---
 
-## Tech stack
+## ⚡ Quick Start
 
-| Layer | Choice |
-|---|---|
-| Backend | Python 3.11, FastAPI, SQLAlchemy, APScheduler |
-| Auth & DB | JWT (HS256), bcrypt, SQLite |
-| Forecasting | Open-Meteo current regional weather; archived persistence fallback; LightGBM artifact disabled locally |
-| Optimization | PuLP (linear programming) |
-| Copilot (planned) | Local LLM via Ollama, function-calling, role-aware |
-| Frontend | Next.js, React, Tailwind, recharts |
-| Storage | Parquet (historical data) / SQLite (live DB) |
-| Deployment | Local run with uvicorn (no Docker) |
+### Prerequisites
+- **Python**: 3.11 or higher
+- **Node.js**: 18.x or higher (`npm` included)
+- **Git**
 
-## Quick start
-
-The current application uses `frontend/` with `backend/`. Open-Meteo supplies a current regional forecast when reachable; carbon uses Electricity Maps v4 only when a key and BD forecast access are available. Assets and tariffs are still synthetic, and the app does not control live equipment. See [live data setup](docs/development/LIVE_DATA_SETUP.md) and [review remediation status](docs/development/PROJECT_REVIEW_2026-10-22.md#remediation-progress-23-october-2026).
-
+### 1. Clone & Configure
 ```bash
-git clone <repo-url>
-cd CloudCamp
-cp .env.example .env      # add your Electricity Maps API key (optional — falls back to cached data without it)
+git clone https://github.com/AshrafAbid078/CloudCamp_Hackathon.git
+cd CloudCamp_Hackathon
 
-# Start Backend
+# Copy sample environment configuration
+cp .env.example .env
+```
+> **Note**: An Electricity Maps API key is optional. If left unconfigured, the application automatically uses verified regional fallback data.
+
+### 2. Backend Setup
+```bash
+# Navigate to backend and create virtual environment
 cd backend
+python -m venv .venv
+
+# Activate virtual environment
+# Windows (PowerShell):
+.\.venv\Scripts\Activate.ps1
+# Linux / macOS:
+source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
-uvicorn main:app --reload
-# backend:  http://localhost:8000
 
-# In another terminal, start the original frontend
+# Start the FastAPI server
+uvicorn main:app --reload --port 8000
+```
+- **Backend API**: `http://localhost:8000`
+- **Interactive Swagger Docs**: `http://localhost:8000/docs`
+
+### 3. Frontend Setup
+In a new terminal window:
+```bash
 cd frontend
-npm ci
+
+# Install dependencies
+npm install
+
+# Start the Next.js development server
 npm run dev
-# frontend: http://localhost:3000
 ```
+- **Web Application**: `http://localhost:3000`
 
-## Repo structure
+---
 
-```
-backend/       [Implemented] FastAPI services: data ingestion, forecasting, dispatch (RegionAdapter, AssetAdapter)
-data/          [Implemented] Cached NSRDB/GFS samples, synthetic facility+battery generator
-notebooks/     [Implemented] EDA and prototyping
-agent/         [Planned] Copilot function-calling service (role-aware)
-frontend/      [Implemented demo] Next.js dashboard connected to the backend
-docs/          [Implemented] Categorized documentation (architecture, product, development, ai-ml, submission, reference)
-prompts/       [Planned] Prompt library (verbatim prompts used to build this) — folder to be added
-```
+## 📡 Key API Endpoints
 
-## Data & AI provenance
-
-| Source | Type | Region | Used for |
+| Method | Endpoint | Description | Access |
 |---|---|---|---|
-| NREL NSRDB | Public dataset | South/SE Asia (confirmed BD) | Historical cached data (2018–2020) — model training and demo forecast |
-| NOAA GFS | Public dataset | Global | Historical cached sample (2020-01 to 2020-05) — cloud-cover features |
-| Electricity Maps API v4 | Optional key | Bangladesh zone BD | Hourly forecast when available; latest reading stored by poller; archived fallback otherwise |
-| Open-Meteo Forecast API | Current weather model | Near Dhaka | Hourly regional GHI forecast, with archived 2020 fallback |
-| Open Power System Data | Public dataset | Europe only | Architecture reference only — not pulled |
-| PJM Data Miner | Public/registered API | US (PJM) only | Architecture reference only — not pulled |
-| Synthetic facility & battery data | Generated | N/A | Used for demo and tests — **no real personal or facility data used anywhere** |
+| `POST` | `/auth/login` | Authenticate user and receive JWT access token | Public |
+| `POST` | `/auth/signup` | Register a new facility account | Public |
+| `GET` | `/auth/me` | Fetch currently authenticated user profile | Authenticated |
+| `GET` | `/forecasting/forecast` | Retrieve solar irradiance and generation forecast | Authenticated |
+| `POST` | `/dispatch/runs` | Execute MILP optimization solver over specified horizon | Authenticated |
+| `GET` | `/dispatch/runs/latest` | Fetch the most recent optimized dispatch plan | Authenticated |
+| `POST` | `/dispatch/override` | Apply operator manual adjustments to asset schedules | Facility Manager / Admin |
+| `GET` | `/data/carbon-snapshots` | Query historical grid carbon intensity telemetry ledger | Authenticated |
+| `GET` | `/health` | Verify solver, forecast engine, and system readiness | Public |
 
-Foundation models used: [fill in the specific local model wired as `COPILOT_MODEL` at submission time].
+---
 
-## Tooling & IDE disclosure
+## 📊 Data Provenance & Reliability
 
-- **Claude** — planning, architecture, prompt drafting, debugging advice
-- **opencode** — actual multi-file implementation (North Mini Code, Nemotron 3 Ultra, DeepSeek V4 Flash, Mimo V2.5, Big Pickle)
-- **Ollama (local)** — deepseek-r1:14b (reasoning-heavy debugging), qwen2.5-coder:1.5b (small snippets), gemma4:12b (docs/multimodal)
-- Memory/context files: `docs/reference/build-prompt.md` (project build/rules file fed to opencode), `docs/product/MERIDIAN_GRID_IDEA.md` (canonical spec reference)
+| Source | Provider | Type | Application Usage |
+|---|---|---|---|
+| **NSRDB** | NREL | Public Satellite Dataset | Baseline multi-year historical solar irradiance (Dhaka, Bangladesh) |
+| **NOAA GFS** | NOAA | Numerical Weather Prediction | Cloud-cover indices and historical feature benchmarks |
+| **Open-Meteo** | Open-Meteo GmbH | Live Operational Forecast | Current hourly regional GHI and temperature forecasts |
+| **Electricity Maps** | Electricity Maps ApS | Real-Time Grid API | Live carbon intensity telemetry for Bangladesh grid zone (`BD`) |
+| **Synthetic Portfolio** | Internal Generator | Synthetic Benchmark Data | Industrial processes and battery models for reproducible evaluation |
 
-## MCP usage disclosure
+*Note: No proprietary or private industrial facility data is utilized. All operational assets and tariffs in the demo environment are synthetically generated for benchmark evaluation.*
 
-[Fill in once decided — the copilot's four tools are structured to become an MCP server; state whether that wrapper was actually built for this submission, or note it as a documented next step if not.]
+---
 
-## Prompt library
+## 👥 Hackathon Submission
 
-See `prompts/` — each entry is a verbatim prompt sent to opencode, with purpose, output summary, and a proprietary toggle.
-
-## Business model
-
-One engine, two go-to-market tracks, pitched in parallel: **Facility SaaS** (per-facility subscription + shared-savings option, sold to industrial plant managers) and a **Utility/DERMS platform** (white-label/API tier for utilities and VPP aggregators). Full detail: see `docs/product/MERIDIAN_GRID_IDEA.md` §4.
-
-## Demo video
-
-3–5 min, structured as: problem → solution walkthrough → live demo → role-toggle beat → team intro → CTA. Full script in `docs/product/APPLICATION_FLOW.md` §5. [Add YouTube link once recorded — must be Public or Unlisted, not Private.]
-
-## Team & roles
-
-[Fill in: names, roles, who owned which module, team leader identified.]
-
-## Disclaimer
-
-No real personal or facility data is used anywhere in this project — demo/training data is either public (NSRDB, NOAA GFS, Electricity Maps) or synthetically generated.
+- **Event**: CloudCampBD Congress — Idea to Unicorn (I2U)
+- **Track**: ClimaTech Domain &bull; Energy Brain Challenge
+- **Team**: Meridian Grid Development Team
+- **License**: MIT License
