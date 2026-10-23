@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dispatch.adapters import (
     IndustrialProcessAdapter,
     BatteryAdapter,

@@ -1,3 +1,4 @@
+from __future__ import annotations
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, Query
 import pandas as pd

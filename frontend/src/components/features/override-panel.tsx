@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Button, Input, Modal } from '@/components/common';
 import { dispatchApi } from '@/lib/api';
-import { AlertTriangle } from 'lucide-react';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { useRole } from '@/hooks';
 
 interface OverridePanelProps {
@@ -32,10 +32,10 @@ export function OverridePanel({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError(null);
     try {
       const res = await dispatchApi.submitManualOverride({
         actionId: `override-${Date.now()}`,
@@ -48,10 +48,13 @@ export function OverridePanel({
         rejectionReason: reason,
         operatorNotes: `Authorized by ${role}`,
       });
+      if (!res.success || !res.plan?.run_id) {
+        throw new Error(res.message || 'The backend failed to apply the requested schedule override.');
+      }
       onSuccess?.(res.message);
       onClose?.();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Override failed.');
+      setError(cause instanceof Error ? cause.message : 'Override failed. No changes were applied.');
     } finally {
       setIsSubmitting(false);
     }
@@ -68,10 +71,17 @@ export function OverridePanel({
       maxWidth="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-5 text-xs text-[var(--text-primary)]">
-        <p className="text-[var(--text-muted)]">Only whole-hour schedule shifts are supported by the backend. Approval and rejection actions are unavailable.</p>
         <Input label="Requested horizon slots" value={proposedWindow} onChange={(e) => setProposedWindow(e.target.value)} helperText="Use slot HH:00 - HH:00 within the asset operating window." />
-        <label className="block text-xs">Reason for shift<textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} className="mt-2 w-full rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-base)] p-3" /></label>
-        {error && <p role="alert" className="text-red-400">{error}</p>}
+        <Input label="Reason / notes (optional)" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g., Scheduled maintenance window" />
+        {error && (
+          <div role="alert" className="p-3.5 rounded-xl bg-red-950/40 border border-red-500/50 text-red-300 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <strong className="block font-semibold text-red-200">Override Rejected</strong>
+              <span>{error}</span>
+            </div>
+          </div>
+        )}
 
         {/* Warning Interlock */}
         <div className="p-3 rounded-2xl bg-[var(--bg-base)] border border-[var(--border-hairline)] text-[11px] text-[var(--text-muted)] flex items-start gap-2">

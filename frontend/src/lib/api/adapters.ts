@@ -22,9 +22,13 @@ import type { CarbonSnapshotRecord } from '../types/system';
 // Helpers: Time & formatting
 // ---------------------------------------------------------------------------
 
-function formatHourIndex(hour: number): string {
-  const h = Math.max(0, Math.min(24, Math.floor(hour)));
-  return `${h.toString().padStart(2, '0')}:00`;
+function formatHourIndex(hour: number, isIntervalEnd = false): string {
+  const h = Math.floor(hour);
+  if (h === 24) {
+    return isIntervalEnd ? '24:00' : '00:00';
+  }
+  const normalized = ((h % 24) + 24) % 24;
+  return `${normalized.toString().padStart(2, '0')}:00`;
 }
 
 function formatHourRange(hours: number[]): string {
@@ -32,7 +36,7 @@ function formatHourRange(hours: number[]): string {
   const sorted = [...hours].sort((a, b) => a - b);
   const start = sorted[0];
   const end = sorted[sorted.length - 1] + 1;
-  return `${formatHourIndex(start)} - ${formatHourIndex(end)}`;
+  return `${formatHourIndex(start)} - ${formatHourIndex(end, true)}`;
 }
 
 function groupContiguousHours(hours: number[]): string[] {
@@ -47,12 +51,12 @@ function groupContiguousHours(hours: number[]): string[] {
     if (sorted[i] === prev + 1) {
       prev = sorted[i];
     } else {
-      ranges.push(`${formatHourIndex(rangeStart)} - ${formatHourIndex(prev + 1)}`);
+      ranges.push(`${formatHourIndex(rangeStart)} - ${formatHourIndex(prev + 1, true)}`);
       rangeStart = sorted[i];
       prev = sorted[i];
     }
   }
-  ranges.push(`${formatHourIndex(rangeStart)} - ${formatHourIndex(prev + 1)}`);
+  ranges.push(`${formatHourIndex(rangeStart)} - ${formatHourIndex(prev + 1, true)}`);
   return ranges;
 }
 
@@ -281,7 +285,16 @@ export function adaptBackendDispatchPlan(data: BackendDispatchPlanResponse): {
     const dischargeWindows = groupContiguousHours(dischargeHours);
 
     const capacityKwh = bat.capacity_kwh;
-    const socPercent = capacityKwh > 0 ? Math.round(bat.initial_soc / capacityKwh * 100) : 0;
+    let socPercent = 0;
+    if (bat.schedule && bat.schedule.length > 0 && capacityKwh > 0 && typeof bat.schedule[0].energy_kwh === 'number') {
+      socPercent = Math.min(100, Math.max(0, Math.round((bat.schedule[0].energy_kwh / capacityKwh) * 100)));
+    } else if (typeof bat.initial_soc === 'number') {
+      if (bat.initial_soc <= 1.0) {
+        socPercent = Math.round(bat.initial_soc * 100);
+      } else if (capacityKwh > 0) {
+        socPercent = Math.min(100, Math.max(0, Math.round((bat.initial_soc / capacityKwh) * 100)));
+      }
+    }
 
     return {
       id: bat.asset_id,
@@ -316,11 +329,13 @@ export function adaptBackendDispatchPlan(data: BackendDispatchPlanResponse): {
   const baseCost = rawKpis.baseline_cost;
   const costPct = baseCost ? Math.round((costSavedUsd / baseCost) * 100) : 0;
 
-  const co2SavedTons = (rawKpis.co2_saved_kg || 0) / 1000;
-  const baseCo2Tons = (rawKpis.baseline_emissions_gco2 ?? 0) / 1000000;
+  const co2SavedTons = (rawKpis.co2_saved_kg ?? 0) / 1000;
+  const baseCo2Tons = rawKpis.baseline_emissions_gco2 != null
+    ? rawKpis.baseline_emissions_gco2 / 1_000_000
+    : 0;
   const co2Pct = baseCo2Tons ? Math.round((co2SavedTons / baseCo2Tons) * 100) : 0;
 
-  const peakShavedKw = rawKpis.peak_shaved_kw || 0;
+  const peakShavedKw = rawKpis.peak_shaved_kw ?? 0;
   const basePeak = rawKpis.peak_baseline_kw;
   const peakPct = basePeak ? Math.round((peakShavedKw / basePeak) * 100) : 0;
 
@@ -333,8 +348,8 @@ export function adaptBackendDispatchPlan(data: BackendDispatchPlanResponse): {
     unoptimizedCarbonTons: Math.round(baseCo2Tons * 100) / 100,
     carbonAvoidedPercent: co2Pct,
 
-    totalPeakShavedKw: Math.round(peakShavedKw),
-    unoptimizedPeakKw: Math.round(rawKpis.peak_baseline_kw),
+    totalPeakShavedKw: Math.round(peakShavedKw * 10) / 10,
+    unoptimizedPeakKw: Math.round(rawKpis.peak_baseline_kw * 10) / 10,
     peakShavedPercent: peakPct,
 
     explanationText: 'Optimized demo schedules against the configured tariff and carbon signals. Review each asset window before making an operational decision.',

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """One mixed-integer program for the demo portfolio's shared grid import."""
 
 import pulp
