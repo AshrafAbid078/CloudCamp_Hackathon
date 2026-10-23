@@ -10,6 +10,8 @@ Provides:
 """
 
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
 from typing import Sequence
 
 import bcrypt
@@ -27,13 +29,15 @@ from auth.schemas import TokenData
 # Password hashing                                                     #
 # ------------------------------------------------------------------ #
 
-# bcrypt only uses the first 72 bytes of a password; bcrypt>=5 raises on longer
-# input, so we truncate explicitly (same effective behaviour as older versions).
+# bcrypt only uses the first 72 bytes of a password; reject longer input.
 _BCRYPT_MAX_BYTES = 72
 
 
 def _to_bcrypt_bytes(plain: str) -> bytes:
-    return plain.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    encoded = plain.encode("utf-8")
+    if len(encoded) > _BCRYPT_MAX_BYTES:
+        raise ValueError("Password exceeds 72 UTF-8 bytes.")
+    return encoded
 
 
 def hash_password(plain: str) -> str:
@@ -48,6 +52,11 @@ def verify_password(plain: str, hashed: str) -> bool:
     except ValueError:
         # Malformed stored hash — treat as a failed login rather than a 500.
         return False
+
+
+def password_version(hashed: str) -> str:
+    """Opaque credential version for JWT invalidation without exposing the hash."""
+    return hmac.new(settings.secret_key.encode(), hashed.encode(), hashlib.sha256).hexdigest()
 
 
 # ------------------------------------------------------------------ #
@@ -85,7 +94,7 @@ def decode_token(token: str) -> TokenData:
             raise credentials_exception
         role = UserRole(role_str) if role_str else None
         return TokenData(username=username, role=role)
-    except JWTError:
+    except (JWTError, ValueError):
         raise credentials_exception
 
 
@@ -123,6 +132,15 @@ def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated. Contact an administrator.",
         )
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Could not validate credentials.")
+    if payload.get("pwd") != password_version(user.hashed_password) or token_data.role != user.role:
+        raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+    if user.must_change_password:
+        # The password endpoint uses get_current_user, so it remains reachable.
+        pass
     return user
 
 
@@ -147,6 +165,8 @@ def require_role(*roles: UserRole):
     allowed: Sequence[UserRole] = roles
 
     def _guard(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.must_change_password:
+            raise HTTPException(status_code=403, detail="Change your password before using this feature.")
         if current_user.role not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

@@ -27,31 +27,31 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles =
-      'inline-flex items-center justify-center font-medium transition-all duration-150 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--accent-solar)]/50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none';
+      'inline-flex items-center justify-center font-semibold transition-colors duration-150 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--accent-clean)]/35 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none';
 
     const variants = {
       solar:
-        'bg-[var(--accent-solar)] text-[var(--bg-base)] font-bold hover:brightness-110 shadow-md shadow-[var(--accent-solar)]/20 active:scale-[0.98]',
+        'bg-[var(--accent-clean)] text-white hover:bg-[#106b65]',
       primary:
-        'bg-[var(--accent-solar)] text-[var(--bg-base)] font-bold hover:brightness-110 shadow-md shadow-[var(--accent-solar)]/20 active:scale-[0.98]',
+        'bg-[var(--accent-clean)] text-white hover:bg-[#106b65]',
       amber:
-        'bg-[var(--accent-solar)] text-[var(--bg-base)] font-bold hover:brightness-110 shadow-md shadow-[var(--accent-solar)]/20 active:scale-[0.98]',
+        'bg-[var(--accent-solar)] text-[#172635] hover:bg-[#c89136]',
       clean:
-        'bg-[var(--accent-clean)] text-[var(--bg-base)] font-bold hover:brightness-110 shadow-md shadow-[var(--accent-clean)]/20 active:scale-[0.98]',
+        'bg-[var(--accent-clean)] text-white hover:bg-[#106b65]',
       stress:
-        'bg-[var(--accent-stress)] text-white font-bold hover:brightness-110 shadow-md shadow-[var(--accent-stress)]/20 active:scale-[0.98]',
+        'bg-[var(--accent-stress)] text-white hover:bg-[#9f4142]',
       surface:
-        'bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-hairline)] hover:bg-[var(--bg-surface-raised)] active:scale-[0.98]',
+        'bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-hairline)] hover:bg-[var(--bg-surface-raised)]',
       outline:
-        'border border-[var(--border-hairline)] bg-transparent text-[var(--text-primary)] hover:bg-[var(--bg-surface-raised)] hover:border-[var(--accent-solar)] active:scale-[0.98]',
+        'border border-[var(--border-hairline)] bg-white text-[var(--text-primary)] hover:bg-[var(--bg-surface-raised)] hover:border-[var(--accent-clean)]',
       ghost:
         'bg-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-raised)]',
     };
 
     const sizes = {
-      sm: 'text-xs px-3 py-1.5 gap-1.5 rounded-lg',
-      md: 'text-xs sm:text-sm px-4 py-2 gap-2 rounded-xl',
-      lg: 'text-sm sm:text-base px-6 py-3 gap-2.5 rounded-2xl',
+      sm: 'text-xs px-3 py-2 gap-1.5',
+      md: 'text-sm px-4 py-2.5 gap-2',
+      lg: 'text-sm sm:text-base px-6 py-3 gap-2.5',
     };
 
     return (

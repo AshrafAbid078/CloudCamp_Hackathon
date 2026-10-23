@@ -96,7 +96,7 @@ export const useRoleStore = create<RoleStoreState>((set, get) => ({
     })),
   getPermissions: () => ROLE_DEFINITIONS[get().role],
 
-  isSidebarOpen: true,
+  isSidebarOpen: false,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   setSidebarOpen: (isOpen) => set({ isSidebarOpen: isOpen }),
 

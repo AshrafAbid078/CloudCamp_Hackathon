@@ -5,7 +5,7 @@ from sqlalchemy.pool import StaticPool
 
 from auth.utils import get_current_user
 from db.database import Base, get_db
-from db.models import DispatchRun, User, UserRole
+from db.models import DispatchRun, DispatchPlanRecord, User, UserRole
 from dispatch.main import app
 
 # /dispatch/plan requires an authenticated user and a database session.
@@ -80,23 +80,23 @@ def test_dispatch_api():
     print("\nDispatch API test passed!")
 
 
-def test_dispatch_run_logs_real_kpis():
-    """Regression: DispatchRun rows must store the KPIs, not None."""
+def test_dispatch_reads_do_not_write_and_post_saves_kpis():
+    """Only an explicit POST persists a complete plan with real KPI values."""
     response = client.get("/dispatch/plan")
     assert response.status_code == 200
-    kpis = response.json()["plan"]["kpis"]
-
     db = _TestingSession()
     try:
-        run = db.query(DispatchRun).order_by(DispatchRun.id.desc()).first()
-        assert run is not None
-        assert run.cost_saved_usd is not None
-        assert run.co2_saved_kg is not None
-        assert run.peak_shaved_kw is not None
-        assert run.cost_saved_usd == kpis["cost_saved_usd"]
-        assert run.peak_shaved_kw == kpis["peak_shaved_kw"]
+        assert db.query(DispatchRun).count() == 0
+        assert db.query(DispatchPlanRecord).count() == 0
     finally:
         db.close()
+
+    created = client.post("/dispatch/runs")
+    assert created.status_code == 200
+    assert created.json()["run_id"] > 0
+    saved = client.get(f'/dispatch/runs/{created.json()["run_id"]}')
+    assert saved.status_code == 200
+    assert saved.json()["plan"]["kpis"] == created.json()["plan"]["kpis"]
 
 
 if __name__ == "__main__":

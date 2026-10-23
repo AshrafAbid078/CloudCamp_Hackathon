@@ -15,6 +15,8 @@ Then visit http://localhost:8000/docs for the interactive API explorer.
 """
 
 import logging
+import secrets
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -24,7 +26,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from db.database import SessionLocal, init_db
 from db.models import User, UserRole
-from auth.utils import hash_password
+from auth.utils import hash_password, verify_password
 from auth.router import router as auth_router
 from forecasting.router import router as forecast_router
 from dispatch.api import router as dispatch_router
@@ -39,30 +41,25 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------ #
 
 def _seed_admin(db: Session) -> None:
-    """
-    If no users exist, create a default admin account:
-        username: admin
-        password: admin123
-        must_change_password: True
-
-    The must_change_password flag is True so the operator is reminded
-    to change the password via PUT /auth/me/password on first login.
-    """
-    count = db.query(User).count()
-    if count == 0:
-        admin = User(
-            username="admin",
-            hashed_password=hash_password("admin123"),
-            role=UserRole.admin,
-            must_change_password=True,
-            is_active=True,
-        )
-        db.add(admin)
+    """Create a random, first-login admin credential for a fresh database."""
+    old_admin = db.query(User).filter(User.username == "admin").first()
+    if db.query(User).count() == 0 or (old_admin and verify_password("admin123", old_admin.hashed_password)):
+        credential = secrets.token_urlsafe(24)
+        path = Path(__file__).resolve().parent / ".initial-admin-credential"
+        path.write_text(f"admin:{credential}\n", encoding="utf-8")
+        if old_admin:
+            old_admin.hashed_password = hash_password(credential)
+            old_admin.must_change_password = True
+        else:
+            db.add(User(
+                username="admin",
+                hashed_password=hash_password(credential),
+                role=UserRole.admin,
+                must_change_password=True,
+                is_active=True,
+            ))
         db.commit()
-        logger.warning(
-            "🔐 Default admin seeded (username=admin, password=admin123). "
-            "CHANGE THIS PASSWORD immediately via PUT /auth/me/password."
-        )
+        logger.warning("Initial admin credential written to %s; change it at first sign-in.", path)
 
 
 @asynccontextmanager
@@ -102,7 +99,7 @@ app = FastAPI(
     description=(
         "AI-powered solar + grid-stress forecasting and "
         "asset dispatch optimization for Bangladesh. "
-        "\n\n**Default credentials (change immediately):** `admin` / `admin123`"
+        "\n\nFresh local databases receive a generated first-login admin credential."
     ),
     lifespan=lifespan,
 )
@@ -127,8 +124,37 @@ app.include_router(dispatch_router)
 
 @app.get("/health", tags=["Meta"])
 def health():
-    """Phase 5 smoke-test gate — confirms the server is up."""
-    return {"status": "ok", "version": "1.0.0"}
+    """Report process availability and the active forecast/solver mode."""
+    import pulp
+    from forecasting.router import get_forecast
+    from dispatch.api import _ALL_PROCESSES, _ALL_BATTERIES
+    from dispatch.solver import solve_process_schedule
+    forecast_ready = False
+    solver_ready = False
+    forecast_model = "unavailable"
+    forecast_sources = None
+    try:
+        active = get_forecast("bd", 1)
+        forecast_ready = len(active["forecast"]["timestamps"]) == 1
+        forecast_model = active["accuracy"]["model"]
+        forecast_sources = active.get("sources")
+    except Exception:
+        logger.exception("Forecast readiness check failed")
+    try:
+        solver_ready = solve_process_schedule(1, 0, 1, 1, [0.1], [500])["status"] == "Optimal"
+    except Exception:
+        logger.exception("Solver readiness check failed")
+    assets_loaded = bool(_ALL_PROCESSES or _ALL_BATTERIES)
+    return {
+        "status": "available" if forecast_ready and solver_ready and assets_loaded and forecast_model == "OpenMeteoForecast" and forecast_sources and forecast_sources.get("carbon") == "electricity_maps_v4_forecast" else "degraded",
+        "version": "1.1.0",
+        "forecast_model": forecast_model,
+        "forecast_sources": forecast_sources,
+        "solver_version": pulp.__version__,
+        "forecast_ready": forecast_ready,
+        "solver_ready": solver_ready,
+        "assets_loaded": assets_loaded,
+    }
 
 
 @app.get("/", tags=["Meta"])

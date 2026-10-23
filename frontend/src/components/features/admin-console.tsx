@@ -45,7 +45,7 @@ export function AdminConsole() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    void Promise.resolve().then(fetchUsers);
   }, []);
 
   const handleCreateUser = async (e: React.FormEvent) => {

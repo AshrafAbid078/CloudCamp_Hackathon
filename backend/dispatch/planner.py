@@ -9,6 +9,7 @@ from dispatch.solver import (
 )
 
 from dispatch.objective import calculate_objective
+from dispatch.joint import solve_joint_schedule
 
 
 # Weights for the combined objective: minimize w1*cost + w2*emissions.
@@ -124,6 +125,9 @@ def dispatch_plan(
     battery_assets: list[BatteryAdapter],
     prices: list[float],
     carbon_intensity: list[float],
+    pv_generation_kw: list[float] | None = None,
+    base_load_kw: list[float] | None = None,
+    feeder_capacity_kw: float | None = None,
 ):
 
     industrial_results = []
@@ -140,6 +144,12 @@ def dispatch_plan(
 
     # Hourly grid-import profiles (kW) used for the system-level peak KPI.
     horizon = len(prices)
+    pv = pv_generation_kw if pv_generation_kw is not None else [0.0] * horizon
+    base = base_load_kw if base_load_kw is not None else [0.0] * horizon
+    joint = solve_joint_schedule(
+        industrial_assets, battery_assets, prices, carbon_intensity,
+        pv_generation_kw=pv, base_load_kw=base, feeder_capacity_kw=feeder_capacity_kw,
+    )
     baseline_load_kw = [0.0] * horizon
     optimized_load_kw = [0.0] * horizon
 
@@ -155,11 +165,15 @@ def dispatch_plan(
             carbon_intensity,
         )
 
-        optimized = calculate_process_optimized(
-            process,
-            prices,
-            carbon_intensity,
-        )
+        optimized_hours = joint["process_hours"][process.asset_id]
+        optimized_cost = sum(process.power_kw * prices[h] for h in optimized_hours)
+        optimized_emissions = calculate_emissions(process.power_kw, optimized_hours, carbon_intensity)
+        optimized = {
+            "hours": optimized_hours,
+            "cost": optimized_cost,
+            "emissions_gco2": optimized_emissions,
+            "objective": optimized_cost + CARBON_PRICE_PER_GCO2 * optimized_emissions,
+        }
 
         cost_saved = (
             baseline["cost"]
@@ -208,6 +222,10 @@ def dispatch_plan(
                 "asset_id": process.asset_id,
                 "asset_type": "industrial",
                 "name": process.name,
+                "power_kw": process.power_kw,
+                "duration": process.duration,
+                "earliest_start": process.earliest_start,
+                "deadline": process.deadline,
 
                 "baseline_hours": baseline["hours"],
                 "optimized_hours": optimized["hours"],
@@ -240,17 +258,13 @@ def dispatch_plan(
 
     for battery in battery_assets:
 
-        optimized = solve_battery_schedule(
-            capacity_kwh=battery.capacity_kwh,
-            current_soc=battery.current_soc,
-            charge_rate_kw=battery.charge_rate_kw,
-            discharge_rate_kw=battery.discharge_rate_kw,
-            prices=prices,
-            carbon_intensity=carbon_intensity,
-            carbon_price_per_gco2=CARBON_PRICE_PER_GCO2,
-        )
-
-        schedule = optimized["schedule"]
+        schedule = joint["battery_schedules"][battery.asset_id]
+        optimized_cost = sum(prices[item["hour"]] * (item["charge_kw"] - item["discharge_kw"])
+                             for item in schedule)
+        optimized_emissions = sum(carbon_intensity[item["hour"]] * (item["charge_kw"] - item["discharge_kw"])
+                                  for item in schedule)
+        optimized = {"total_cost": optimized_cost, "total_emissions_gco2": optimized_emissions,
+                     "objective_value": optimized_cost + CARBON_PRICE_PER_GCO2 * optimized_emissions}
 
         # Baseline battery:
         # do nothing, preserve initial SOC.
@@ -310,6 +324,10 @@ def dispatch_plan(
             {
                 "asset_id": battery.asset_id,
                 "asset_type": "battery",
+                "capacity_kwh": battery.capacity_kwh,
+                "initial_soc": battery.current_soc,
+                "charge_rate_kw": battery.charge_rate_kw,
+                "discharge_rate_kw": battery.discharge_rate_kw,
 
                 "schedule": schedule,
 
@@ -347,6 +365,15 @@ def dispatch_plan(
     # FINAL SYSTEM KPIs
     # =================================================
 
+    baseline_grid_kw = [max(0.0, base[h] + baseline_load_kw[h] - pv[h]) for h in range(horizon)]
+    optimized_grid_kw = joint["grid_import_kw"]
+    total_baseline_cost = sum(prices[h] * baseline_grid_kw[h] for h in range(horizon))
+    total_optimized_cost = sum(prices[h] * optimized_grid_kw[h] for h in range(horizon))
+    total_baseline_emissions = sum(carbon_intensity[h] * baseline_grid_kw[h] for h in range(horizon))
+    total_optimized_emissions = sum(carbon_intensity[h] * optimized_grid_kw[h] for h in range(horizon))
+    total_baseline_objective = total_baseline_cost + CARBON_PRICE_PER_GCO2 * total_baseline_emissions
+    total_optimized_objective = total_optimized_cost + CARBON_PRICE_PER_GCO2 * total_optimized_emissions
+
     total_cost_saved = (
         total_baseline_cost
         - total_optimized_cost
@@ -362,14 +389,23 @@ def dispatch_plan(
         - total_optimized_objective
     )
 
-    peak_baseline_kw = max(baseline_load_kw, default=0.0)
-    peak_optimized_kw = max(optimized_load_kw, default=0.0)
+    peak_baseline_kw = max(baseline_grid_kw, default=0.0)
+    peak_optimized_kw = max(optimized_grid_kw, default=0.0)
     peak_shaved_kw = peak_baseline_kw - peak_optimized_kw
 
     return {
         "industrial": industrial_results,
 
         "batteries": battery_results,
+
+        "grid_balance": {
+            "baseline_import_kw": baseline_grid_kw,
+            "optimized_import_kw": optimized_grid_kw,
+            "pv_generation_kw": pv,
+            "base_load_kw": base,
+            "feeder_capacity_kw": feeder_capacity_kw,
+            "pv_model": "capacity-scaled GHI estimate" if any(pv) else "not configured",
+        },
 
         "kpis": {
             "baseline_cost": total_baseline_cost,

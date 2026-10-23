@@ -1,0 +1,18 @@
+'use client';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { dispatchApi } from '@/lib/api';
+import type { OptimizationRunHistory } from '@/lib/types';
+
+export default function HistoryPage() {
+  const [runs, setRuns] = useState<OptimizationRunHistory[]>([]);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const refresh = useCallback(async () => { try { setRuns(await dispatchApi.getDispatchHistory()); setError(''); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Run history unavailable.'); } }, []);
+  useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
+  async function decide(id: string, action: 'approve'|'reject') { setBusy(true); setError(''); try { await dispatchApi.decideRun(id, action, action==='reject'?reason:undefined); setNotice(id+' '+(action==='approve'?'approved':'rejected')+'. No equipment command was sent.'); setRejectId(null); setReason(''); await refresh(); } catch(cause) { setError(cause instanceof Error?cause.message:'Decision failed.'); } finally { setBusy(false); } }
+  return <div className="space-y-8"><header className="flex items-end justify-between gap-3"><div><p className="page-kicker">Workspace / Run history</p><h1 className="page-title">Run history</h1><p className="page-subtitle">Saved optimization plans and review decisions</p></div><Link href="/dispatch" className="teal-link text-sm">← Dispatch</Link></header>{error&&<p role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-red-700">{error}</p>}{notice&&<p role="status" className="rounded-md border border-teal-200 bg-teal-50 p-4 text-teal-800">{notice}</p>}<section className="surface-panel overflow-hidden"><div className="px-6 pt-6"><h2 className="text-lg font-bold">Saved runs</h2><p className="mt-1 text-sm text-[var(--text-muted)]">Decisions stay in this demo. They do not execute schedules.</p></div><div className="overflow-x-auto px-6 pb-3"><table className="quiet-table min-w-[740px]"><thead><tr><th>Run ID</th><th>Created</th><th>Cost change</th><th>CO₂ impact</th><th>Peak impact</th><th>Status</th><th>Review</th></tr></thead><tbody>{runs.map(run=><tr key={run.runId}><td className="font-semibold">{run.runId}</td><td>{new Date(run.timestamp).toLocaleString()}</td><td>{(run.costSavedUsd<0?'−':'+')+'$'+Math.abs(run.costSavedUsd).toFixed(2)}</td><td>{run.carbonAvoidedKg.toFixed(1)} kg</td><td>{run.peakShavedKw.toFixed(1)} kW</td><td><span className="demo-tag">{run.status==='pending'?'Pending':run.status==='approve'?'Approved':'Rejected'}</span></td><td>{run.status==='pending'&&<div className="flex flex-wrap gap-2"><button disabled={busy} onClick={()=>void decide(run.runId,'approve')} className="teal-link disabled:opacity-50">Approve</button><button disabled={busy} onClick={()=>setRejectId(run.runId)} className="text-red-700 disabled:opacity-50">Reject</button>{rejectId===run.runId&&<div className="flex w-full gap-2"><input aria-label="Rejection reason" value={reason} onChange={event=>setReason(event.target.value)} className="form-control min-w-40" placeholder="Reason" maxLength={500}/><button disabled={busy||!reason.trim()} onClick={()=>void decide(run.runId,'reject')} className="teal-link disabled:opacity-50">Confirm</button></div>}</div>}</td></tr>)}</tbody></table>{runs.length===0&&<p className="py-5 text-sm text-[var(--text-muted)]">No saved runs yet. Create one from Dispatch.</p>}</div></section></div>;
+}

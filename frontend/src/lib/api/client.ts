@@ -4,7 +4,6 @@
 
 import type {
   User,
-  UserRole,
   LoginResponse,
   SignupRequest,
   AdminUserRecord,
@@ -25,7 +24,8 @@ export class ApiError extends Error {
     public statusText: string,
     public data?: unknown
   ) {
-    super(`API Error: ${status} ${statusText}`);
+    const detail = data && typeof data === 'object' && 'detail' in data ? (data as { detail: unknown }).detail : null;
+    super(typeof detail === 'string' ? detail : `API Error: ${status} ${statusText}`);
     this.name = 'ApiError';
   }
 }
@@ -85,6 +85,11 @@ export async function apiClient<T>(
       } catch {
         errorBody = await response.text();
       }
+      if (response.status === 401 && endpoint !== '/auth/login' && typeof window !== 'undefined') {
+        localStorage.removeItem('meridian_token');
+        localStorage.removeItem('meridian_user');
+        window.dispatchEvent(new Event('meridian-session-expired'));
+      }
       throw new ApiError(response.status, response.statusText, errorBody);
     }
 
@@ -132,107 +137,41 @@ export const authApi = {
    * POST /auth/login -> Obtain JWT access token
    */
   async login(username: string, password: string): Promise<LoginResponse> {
-    try {
-      const data = await apiClient<LoginResponse>('/auth/login', {
+      return apiClient<LoginResponse>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
-      return data;
-    } catch (err) {
-      // If backend is unreachable (e.g. not running on port 8000), support local simulation
-      // for seamless development experience while warning the user.
-      if (isNetworkOrOfflineError(err)) {
-        console.warn('Backend server on port 8000 is not reachable. Using local session fallback.');
-        const role: UserRole = username.toLowerCase().includes('operator') ? 'grid_operator' : 'facility_manager';
-        return {
-          access_token: `simulated-jwt-${Date.now()}`,
-          token_type: 'bearer',
-          expires_in_minutes: 60,
-          role,
-          must_change_password: username === 'admin' && password === 'admin123',
-          user: {
-            id: 'sim-1',
-            name: username.split('@')[0],
-            email: username,
-            role,
-          },
-        };
-      }
-      throw err;
-    }
   },
 
   /**
    * POST /auth/signup -> Register new user and return JWT access token
    */
   async signup(data: SignupRequest): Promise<LoginResponse> {
-    try {
-      const res = await apiClient<LoginResponse>('/auth/signup', {
+      return apiClient<LoginResponse>('/auth/signup', {
         method: 'POST',
         body: JSON.stringify({
           username: data.username,
           password: data.password,
-          role: data.role,
         }),
       });
-      return res;
-    } catch (err) {
-      if (isNetworkOrOfflineError(err)) {
-        console.warn('Backend server on port 8000 is not reachable. Using local session fallback.');
-        return {
-          access_token: `simulated-jwt-${Date.now()}`,
-          token_type: 'bearer',
-          expires_in_minutes: 60,
-          role: data.role,
-          must_change_password: false,
-          user: {
-            id: `sim-${Date.now()}`,
-            name: data.fullName,
-            email: data.email || data.username,
-            role: data.role,
-          },
-        };
-      }
-      throw err;
-    }
   },
 
   /**
    * GET /auth/me -> Get current user profile
    */
   async getMe(): Promise<User> {
-    try {
-      return await apiClient<User>('/auth/me');
-    } catch (err) {
-      if (isNetworkOrOfflineError(err) && typeof window !== 'undefined') {
-        const stored = localStorage.getItem('meridian_user');
-        if (stored) {
-          try {
-            return JSON.parse(stored) as User;
-          } catch {
-            // Ignore parse errors and throw err
-          }
-        }
-      }
-      throw err;
-    }
+    const account = await apiClient<{ id: number; username: string; role: User['role']; must_change_password: boolean }>('/auth/me');
+    return { id: String(account.id), name: account.username, email: account.username, role: account.role, mustChangePassword: account.must_change_password };
   },
 
   /**
    * PUT /auth/me/password -> Change own password
    */
   async changePassword(currentPassword: string, newPassword: string): Promise<{ detail: string }> {
-    try {
-      return await apiClient<{ detail: string }>('/auth/me/password', {
+      return apiClient<{ detail: string }>('/auth/me/password', {
         method: 'PUT',
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       });
-    } catch (err) {
-      if (isNetworkOrOfflineError(err)) {
-        return { detail: 'Password updated successfully (offline simulated session)' };
-      }
-      throw err;
-    }
   },
 
   /**
@@ -256,39 +195,7 @@ export const adminApi = {
    * GET /auth/users -> List all users (admin only)
    */
   async getUsers(): Promise<AdminUserRecord[]> {
-    try {
-      return await apiClient<AdminUserRecord[]>('/auth/users');
-    } catch (err) {
-      if (isNetworkOrOfflineError(err)) {
-        return [
-          {
-            id: 1,
-            username: 'admin',
-            role: 'admin',
-            must_change_password: true,
-            is_active: true,
-            created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
-          },
-          {
-            id: 2,
-            username: 'facility_ops@epz.bd',
-            role: 'facility_manager',
-            must_change_password: false,
-            is_active: true,
-            created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-          },
-          {
-            id: 3,
-            username: 'grid_control@pgcb.gov.bd',
-            role: 'grid_operator',
-            must_change_password: false,
-            is_active: true,
-            created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-          },
-        ];
-      }
-      throw err;
-    }
+    return apiClient<AdminUserRecord[]>('/auth/users');
   },
 
   /**
@@ -357,28 +264,6 @@ export const dataApi = {
         };
       });
     } catch (err) {
-      if (isNetworkOrOfflineError(err)) {
-        const now = Date.now();
-        return Array.from({ length: 12 }, (_, i) => {
-          const polledAt = new Date(now - i * 3600000).toISOString();
-          const ci = Math.round(620 + Math.sin(i) * 55);
-          return {
-            id: i + 1,
-            polled_at: polledAt,
-            polledAt,
-            reading_datetime: polledAt,
-            readingDatetime: polledAt,
-            region: 'BD',
-            carbon_intensity_gco2eq_kwh: ci,
-            carbonIntensityGco2eqKwh: ci,
-            is_estimated: false,
-            isEstimated: false,
-            estimation_method: 'Electricity Maps live API feed (cached)',
-            estimationMethod: 'Electricity Maps live API feed (cached)',
-            source: 'electricity_maps',
-          };
-        });
-      }
       throw err;
     }
   },

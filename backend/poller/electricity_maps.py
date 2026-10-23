@@ -31,7 +31,7 @@ from db.models import CarbonSnapshot
 
 logger = logging.getLogger(__name__)
 
-_API_BASE = "https://api.electricitymap.org/v3"
+_API_BASE = "https://api.electricitymaps.com/v4"
 _TIMEOUT_SEC = 10
 
 
@@ -137,7 +137,7 @@ def poll_carbon_intensity(region: str | None = None) -> CarbonSnapshot | None:
             carbon_intensity_gco2eq_kwh=carbon_intensity,
             is_estimated=is_estimated,
             estimation_method=estimation_method,
-            source="electricity_maps_api_v3",
+            source="electricity_maps_api_v4",
         )
         db.add(snapshot)
         db.commit()

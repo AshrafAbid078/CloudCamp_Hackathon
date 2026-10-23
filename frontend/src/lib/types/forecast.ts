@@ -9,10 +9,10 @@ export interface SolarDataPoint {
   dni?: number; // Direct Normal Irradiance (W/m²)
   dhi?: number; // Diffuse Horizontal Irradiance (W/m²)
   clearsky?: number; // Clearsky physical model (W/m²)
-  gridStressIndex: number; // 0 - 100 (feeder congestion / marginal carbon)
+  gridStressIndex?: number; // only when provided by a measured grid-stress service
   carbonIntensityGco2: number; // gCO2 / kWh
-  cloudCoverPercent: number; // 0 - 100%
-  temperatureC: number;
+  cloudCoverPercent?: number; // 0 - 100%
+  temperatureC?: number;
   nsrdbHistoricalGhi?: number;
   gfsPredictedCloud?: number;
   isEstimated?: boolean;
@@ -21,21 +21,25 @@ export interface SolarDataPoint {
 
 export interface ModelBenchmarkAccuracy {
   metric: string;
-  lightGbmValue: number;
-  persistenceValue: number;
+  lightGbmValue: number | null;
+  persistenceValue: number | null;
   unit: string;
-  improvementPercent: number;
+  improvementPercent: number | null;
 }
 
 export interface ForecastSummaryMetrics {
   currentGhi: number;
   peakGhiForecast: number;
-  expectedDailySolarKwh: number;
-  currentGridStressIndex: number;
-  peakStressWindow: string;
-  modelType: 'LightGBM' | 'PersistenceBaseline';
+  expectedDailySolarKwh: number | null;
+  currentGridStressIndex: number | null;
+  peakStressWindow: string | null;
+  modelType: 'LightGBM' | 'PersistenceBaseline' | 'OpenMeteoForecast';
+  solarSource: string;
+  carbonSource: string;
+  sourceNote: string | null;
+  forecastIssuedAt: string | null;
   isEstimated: boolean;
   estimationMethod: string;
-  lastTrainedDate: string;
+  lastTrainedDate: string | null;
   benchmarks: ModelBenchmarkAccuracy[];
 }

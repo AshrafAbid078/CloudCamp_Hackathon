@@ -8,6 +8,7 @@ export interface User {
   avatarUrl?: string;
   organization?: string;
   facilityLocation?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface AuthSession {

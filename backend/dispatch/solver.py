@@ -47,31 +47,23 @@ def solve_process_schedule(
         pulp.LpMinimize,
     )
 
+    starts = range(earliest_start, deadline - duration + 1)
     x = {
-        t: pulp.LpVariable(
-            f"run_{t}",
-            cat="Binary",
-        )
-        for t in available_slots
+        t: pulp.LpVariable(f"start_{t}", lowBound=0, upBound=1, cat=pulp.LpBinary)
+        for t in starts
     }
 
     # Combined cost + emissions objective
     problem += pulp.lpSum(
-        (
-            prices[t] * power_kw
-            +
-            carbon_price_per_gco2
-            * power_kw
-            * carbon_intensity[t]
-        )
-        * x[t]
-        for t in available_slots
+        sum((prices[h] + carbon_price_per_gco2 * carbon_intensity[h]) * power_kw
+            for h in range(t, t + duration)) * x[t]
+        for t in starts
     )
 
     # Process must run exactly duration hours
     problem += (
-        pulp.lpSum(x[t] for t in available_slots)
-        == duration
+        pulp.lpSum(x[t] for t in starts)
+        == 1
     )
 
     problem.solve(_get_solver())
@@ -81,11 +73,8 @@ def solve_process_schedule(
             "No optimal schedule was found."
         )
 
-    selected_hours = [
-        t
-        for t in available_slots
-        if pulp.value(x[t]) == 1
-    ]
+    selected_start = next(t for t in starts if pulp.value(x[t]) > 0.5)
+    selected_hours = list(range(selected_start, selected_start + duration))
 
     total_cost = sum(
         prices[t] * power_kw
@@ -228,7 +217,7 @@ def solve_battery_schedule(
     mode = {
         t: pulp.LpVariable(
             f"mode_{t}",
-            cat="Binary",
+            lowBound=0, upBound=1, cat=pulp.LpBinary,
         )
         for t in hours
     }

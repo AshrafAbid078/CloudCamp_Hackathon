@@ -15,7 +15,6 @@ import type {
   BatteryAssetTrack,
   DispatchSummaryKpis,
   ScheduledActionItem,
-  OptimizationRunHistory,
 } from '../types/dispatch';
 import type { CarbonSnapshotRecord } from '../types/system';
 
@@ -24,7 +23,7 @@ import type { CarbonSnapshotRecord } from '../types/system';
 // ---------------------------------------------------------------------------
 
 function formatHourIndex(hour: number): string {
-  const h = Math.max(0, Math.min(23, Math.floor(hour)));
+  const h = Math.max(0, Math.min(24, Math.floor(hour)));
   return `${h.toString().padStart(2, '0')}:00`;
 }
 
@@ -70,6 +69,15 @@ export interface BackendForecastResponse {
     mape?: number | null;
     note?: string;
   };
+  sources?: {
+    solar: string;
+    carbon: string;
+    location?: string | { latitude: number; longitude: number };
+    weather_fetched_at?: string;
+    carbon_as_of?: string | null;
+    note?: string;
+    fallback?: boolean;
+  };
   forecast: {
     timestamps: string[];
     solar_ghi_w_m2: number[];
@@ -89,69 +97,44 @@ export function adaptBackendForecast(
 
   for (let i = 0; i < count; i++) {
     const rawTs = forecast.timestamps[i];
-    let timeLabel = `${i}:00`;
-    let hour = i;
-    try {
-      const d = new Date(rawTs);
-      hour = d.getHours();
-      timeLabel = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    } catch {
-      timeLabel = `${i}:00`;
-    }
+    const d = new Date(rawTs);
+    if (Number.isNaN(d.getTime())) throw new Error('Forecast contains an invalid timestamp.');
+    const timeLabel = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
 
     const ghi = Math.max(0, Math.round((forecast.solar_ghi_w_m2[i] || 0) * 10) / 10);
     const ghiLower = Math.max(0, Math.round((forecast.solar_ghi_lower[i] || 0) * 10) / 10);
     const ghiUpper = Math.max(ghi, Math.round((forecast.solar_ghi_upper[i] || 0) * 10) / 10);
-    const carbonIntensity = Math.round(forecast.grid_stress_gco2_kwh[i] || 640);
-
-    // Grid stress index 0 - 100 based on carbon intensity (400 - 800 gCO2 range)
-    const gridStressIndex = Math.min(
-      100,
-      Math.max(10, Math.round(((carbonIntensity - 400) / 400) * 100))
-    );
-
-    // Diurnal temperature estimation for Bangladesh (22C at night to 33C at midday)
-    const tempC = Math.round(23 + 10 * Math.sin(((hour - 6) / 18) * Math.PI));
-    const cloudCover = ghi > 0 ? Math.round(15 + Math.random() * 20) : 5;
-
-    // Clearsky physical model reference
-    const clearsky = hour >= 6 && hour <= 18
-      ? Math.round(920 * Math.sin(((hour - 6) / 12) * Math.PI))
-      : 0;
+    const carbonIntensity = Math.round(forecast.grid_stress_gco2_kwh[i] ?? 0);
 
     series.push({
       timestamp: timeLabel,
       ghiForecast: ghi,
       ghiLowerBound: ghiLower,
       ghiUpperBound: ghiUpper,
-      gridStressIndex,
       carbonIntensityGco2: carbonIntensity,
-      cloudCoverPercent: cloudCover,
-      temperatureC: Math.max(20, tempC),
-      clearsky: Math.max(0, clearsky),
-      isEstimated: false,
-      estimationMethod: accuracy.model,
+      isEstimated: true,
+      estimationMethod: data.sources?.solar === 'open_meteo_weather_forecast' ? 'Current weather-model forecast' : 'Archived solar input',
     });
   }
 
   const allGhi = series.map((s) => s.ghiForecast);
   const peakGhi = Math.max(...allGhi, 0);
-  const totalKwh = Math.round(allGhi.reduce((acc, v) => acc + v, 0) * 0.001 * 10) / 10;
+  const totalKwh = null; // PV capacity is unknown; GHI cannot be converted to facility kWh.
 
   const benchmarks: ModelBenchmarkAccuracy[] = [
     {
       metric: 'RMSE (W/m²)',
-      lightGbmValue: accuracy.rmse ? Math.round(accuracy.rmse * 10) / 10 : 42.6,
-      persistenceValue: 88.4,
+      lightGbmValue: accuracy.rmse == null ? null : Math.round(accuracy.rmse * 10) / 10,
+      persistenceValue: null,
       unit: 'W/m²',
-      improvementPercent: 51.8,
+      improvementPercent: null,
     },
     {
       metric: 'MAPE (%)',
-      lightGbmValue: accuracy.mape ? Math.round(accuracy.mape * 10) / 10 : 7.9,
-      persistenceValue: 16.2,
+      lightGbmValue: accuracy.mape == null ? null : Math.round(accuracy.mape * 1000) / 10,
+      persistenceValue: null,
       unit: '%',
-      improvementPercent: 51.2,
+      improvementPercent: null,
     },
   ];
 
@@ -159,18 +142,16 @@ export function adaptBackendForecast(
     currentGhi: series[0]?.ghiForecast ?? 0,
     peakGhiForecast: peakGhi,
     expectedDailySolarKwh: totalKwh,
-    currentGridStressIndex: series[0]?.gridStressIndex ?? 45,
-    peakStressWindow: '18:00 - 22:00',
-    modelType: accuracy.model.toLowerCase().includes('gbm')
-      ? 'LightGBM'
-      : 'PersistenceBaseline',
-    isEstimated: false,
+    currentGridStressIndex: null,
+    peakStressWindow: null,
+    modelType: accuracy.model === 'OpenMeteoForecast' ? 'OpenMeteoForecast' : accuracy.model.toLowerCase().includes('gbm') ? 'LightGBM' : 'PersistenceBaseline',
+    solarSource: data.sources?.solar ?? 'archived_2020',
+    carbonSource: data.sources?.carbon ?? 'archived',
+    sourceNote: data.sources?.note ?? null,
+    forecastIssuedAt: data.sources?.weather_fetched_at ?? null,
+    isEstimated: true,
     estimationMethod: accuracy.model,
-    lastTrainedDate: new Date().toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }),
+    lastTrainedDate: null,
     benchmarks,
   };
 
@@ -185,6 +166,10 @@ export interface BackendProcessPlan {
   asset_id: string;
   asset_type: string;
   name?: string;
+  power_kw: number;
+  duration: number;
+  earliest_start: number;
+  deadline: number;
   baseline_hours: number[];
   optimized_hours: number[];
   baseline_cost: number;
@@ -200,12 +185,16 @@ export interface BackendBatteryScheduleStep {
   hour: number;
   charge_kw: number;
   discharge_kw: number;
-  soc_kwh: number;
+  energy_kwh: number;
 }
 
 export interface BackendBatteryPlan {
   asset_id: string;
   asset_type: string;
+  capacity_kwh: number;
+  initial_soc: number;
+  charge_rate_kw: number;
+  discharge_rate_kw: number;
   schedule: BackendBatteryScheduleStep[];
   baseline_cost: number;
   optimized_cost: number;
@@ -227,6 +216,7 @@ export interface BackendDispatchPlanResponse {
   };
   forecast_used?: {
     model: string;
+    sources?: BackendForecastResponse['sources'];
     timestamps: string[];
     prices_usd_kwh: number[];
     carbon_intensity_gco2_kwh: number[];
@@ -250,14 +240,6 @@ export interface BackendDispatchPlanResponse {
   };
 }
 
-const FACILITY_NAMES = [
-  'Dhaka EPZ Textile Mill',
-  'Chittagong Heavy Steel',
-  'Gazipur Industrial Park',
-  'Narayanganj Spinning Mill',
-  'Apex Smart Hub',
-];
-
 export function adaptBackendDispatchPlan(data: BackendDispatchPlanResponse): {
   industrial: IndustrialAssetTrack[];
   batteries: BatteryAssetTrack[];
@@ -267,30 +249,27 @@ export function adaptBackendDispatchPlan(data: BackendDispatchPlanResponse): {
   const { plan } = data;
 
   // 1. Industrial tracks
-  const industrial: IndustrialAssetTrack[] = (plan.industrial || []).map((proc, idx) => {
-    const duration = proc.optimized_hours ? proc.optimized_hours.length : 4;
-    const powerKw = Math.max(120, Math.round(proc.optimized_cost * 18 + 150));
-    const facility = FACILITY_NAMES[idx % FACILITY_NAMES.length];
+  const industrial: IndustrialAssetTrack[] = (plan.industrial || []).map((proc) => {
 
     return {
       id: proc.asset_id,
       name: proc.name || `Industrial Unit ${proc.asset_id.replace('proc_', '')}`,
-      facility,
-      powerKw,
-      earliestStart: '06:00',
-      deadline: '22:00',
-      durationHours: duration,
+      facility: 'Bangladesh demo facility',
+      powerKw: proc.power_kw,
+      earliestStart: formatHourIndex(proc.earliest_start),
+      deadline: formatHourIndex(proc.deadline),
+      durationHours: proc.duration,
       chosenRunWindow: formatHourRange(proc.optimized_hours),
       baselineRunWindow: formatHourRange(proc.baseline_hours),
       status: 'optimal',
       costSavedUsd: Math.round(proc.cost_saved * 100) / 100,
       carbonAvoidedKg: Math.round((proc.emissions_saved_gco2 / 1000) * 10) / 10,
-      peakKwShaved: Math.round(powerKw * 0.4),
+      peakKwShaved: 0,
     };
   });
 
   // 2. Battery tracks
-  const batteries: BatteryAssetTrack[] = (plan.batteries || []).map((bat, idx) => {
+  const batteries: BatteryAssetTrack[] = (plan.batteries || []).map((bat) => {
     const chargeHours = (bat.schedule || [])
       .filter((s) => s.charge_kw > 0.05)
       .map((s) => s.hour);
@@ -301,24 +280,23 @@ export function adaptBackendDispatchPlan(data: BackendDispatchPlanResponse): {
     const chargeWindows = groupContiguousHours(chargeHours);
     const dischargeWindows = groupContiguousHours(dischargeHours);
 
-    const capacityKwh = 500;
-    const initialSoc = bat.schedule?.[0]?.soc_kwh ?? 250;
-    const socPercent = Math.min(100, Math.max(10, Math.round((initialSoc / capacityKwh) * 100)));
+    const capacityKwh = bat.capacity_kwh;
+    const socPercent = capacityKwh > 0 ? Math.round(bat.initial_soc / capacityKwh * 100) : 0;
 
     return {
       id: bat.asset_id,
       name: `Commercial BESS ${bat.asset_id.replace('bat_', '')}`,
-      facility: FACILITY_NAMES[(idx + 2) % FACILITY_NAMES.length],
+      facility: 'Bangladesh demo facility',
       capacityKwh,
       currentSocPercent: socPercent,
-      chargeDischargeRateKw: bat.peak_discharge_kw || 100,
-      chargeWindows: chargeWindows.length > 0 ? chargeWindows : ['11:00 - 14:00 (Solar Peak)'],
-      dischargeWindows: dischargeWindows.length > 0 ? dischargeWindows : ['18:00 - 21:00 (Tariff Spike)'],
+      chargeDischargeRateKw: Math.max(bat.charge_rate_kw, bat.discharge_rate_kw),
+      chargeWindows,
+      dischargeWindows,
       status: 'optimal',
       costSavedUsd: Math.round(bat.cost_saved * 100) / 100,
       carbonAvoidedKg: Math.round((bat.emissions_saved_gco2 / 1000) * 10) / 10,
-      peakKwShaved: Math.round(bat.peak_discharge_kw || 75),
-      cyclesCount: 1,
+      peakKwShaved: 0,
+      cyclesCount: 0,
     };
   });
 
@@ -335,32 +313,31 @@ export function adaptBackendDispatchPlan(data: BackendDispatchPlanResponse): {
   };
 
   const costSavedUsd = rawKpis.cost_saved_usd ?? rawKpis.cost_saved ?? 0;
-  const baseCost = rawKpis.baseline_cost || 1;
-  const costPct = Math.min(100, Math.max(0, Math.round((costSavedUsd / baseCost) * 100)));
+  const baseCost = rawKpis.baseline_cost;
+  const costPct = baseCost ? Math.round((costSavedUsd / baseCost) * 100) : 0;
 
   const co2SavedTons = (rawKpis.co2_saved_kg || 0) / 1000;
-  const baseCo2Tons = ((rawKpis.baseline_emissions_gco2 || 0) / 1000000) || (co2SavedTons * 4.5) || 2.5;
-  const co2Pct = Math.min(100, Math.max(0, Math.round((co2SavedTons / baseCo2Tons) * 100)));
+  const baseCo2Tons = (rawKpis.baseline_emissions_gco2 ?? 0) / 1000000;
+  const co2Pct = baseCo2Tons ? Math.round((co2SavedTons / baseCo2Tons) * 100) : 0;
 
   const peakShavedKw = rawKpis.peak_shaved_kw || 0;
-  const basePeak = rawKpis.peak_baseline_kw || 1;
-  const peakPct = Math.min(100, Math.max(0, Math.round((peakShavedKw / basePeak) * 100)));
+  const basePeak = rawKpis.peak_baseline_kw;
+  const peakPct = basePeak ? Math.round((peakShavedKw / basePeak) * 100) : 0;
 
   const kpis: DispatchSummaryKpis = {
     totalCostSavedUsd: Math.round(costSavedUsd * 100) / 100,
     unoptimizedCostUsd: Math.round(rawKpis.baseline_cost * 100) / 100,
-    costSavedPercent: costPct || 24,
+    costSavedPercent: costPct,
 
     totalCarbonAvoidedTons: Math.round(co2SavedTons * 100) / 100,
     unoptimizedCarbonTons: Math.round(baseCo2Tons * 100) / 100,
-    carbonAvoidedPercent: co2Pct || 28,
+    carbonAvoidedPercent: co2Pct,
 
     totalPeakShavedKw: Math.round(peakShavedKw),
     unoptimizedPeakKw: Math.round(rawKpis.peak_baseline_kw),
-    peakShavedPercent: peakPct || 22,
+    peakShavedPercent: peakPct,
 
-    explanationText:
-      'PuLP Mixed-Integer Linear Programming (MILP) solver converged in <250ms. High-consumption industrial thermal & spinning runs synchronized with solar generation hours while BESS storage shaves peak evening grid import tariff spikes.',
+    explanationText: 'Optimized demo schedules against the configured tariff and carbon signals. Review each asset window before making an operational decision.',
   };
 
   // 4. Action items
@@ -374,7 +351,7 @@ export function adaptBackendDispatchPlan(data: BackendDispatchPlanResponse): {
       costSavedUsd: item.costSavedUsd,
       carbonAvoidedKg: item.carbonAvoidedKg,
       peakKwShaved: item.peakKwShaved,
-      actionSummary: `Shifted from ${item.baselineRunWindow} into solar window ${item.chosenRunWindow}`,
+      actionSummary: `Baseline ${item.baselineRunWindow}; optimized ${item.chosenRunWindow}`,
       isOverridden: false,
     })),
     ...batteries.map((item) => ({
@@ -382,48 +359,16 @@ export function adaptBackendDispatchPlan(data: BackendDispatchPlanResponse): {
       assetId: item.id,
       assetName: item.name,
       assetType: 'battery' as const,
-      scheduledTimeWindow: `${item.chargeWindows[0] || '11:00 - 14:00'} (Charge) / ${item.dischargeWindows[0] || '18:00 - 21:00'} (Discharge)`,
+      scheduledTimeWindow: `${item.chargeWindows.join(', ') || 'Idle'} (Charge) / ${item.dischargeWindows.join(', ') || 'Idle'} (Discharge)`,
       costSavedUsd: item.costSavedUsd,
       carbonAvoidedKg: item.carbonAvoidedKg,
       peakKwShaved: item.peakKwShaved,
-      actionSummary: `Solar soak charge -> Evening peak shave discharge (${item.chargeDischargeRateKw} kW rate)`,
+      actionSummary: `Battery schedule at up to ${item.chargeDischargeRateKw} kW`,
       isOverridden: false,
     })),
   ];
 
   return { industrial, batteries, kpis, actions };
-}
-
-// ---------------------------------------------------------------------------
-// 3. Dispatch History Adapter
-// ---------------------------------------------------------------------------
-
-export interface BackendDispatchRunRecord {
-  id: number;
-  timestamp: string;
-  region: string;
-  hours: number;
-  industrial_count: number;
-  battery_count: number;
-  cost_saved_usd: number | null;
-  co2_saved_kg: number | null;
-  peak_shaved_kw: number | null;
-  model_used: string | null;
-  triggered_by: string | null;
-}
-
-export function adaptBackendDispatchHistory(
-  runs: BackendDispatchRunRecord[]
-): OptimizationRunHistory[] {
-  return runs.map((r) => ({
-    runId: `RUN-${r.id.toString().padStart(4, '0')}`,
-    timestamp: r.timestamp,
-    costSavedUsd: r.cost_saved_usd ?? 0,
-    carbonAvoidedKg: r.co2_saved_kg ?? 0,
-    peakShavedKw: r.peak_shaved_kw ?? 0,
-    solverConvergenceMs: 180 + (r.id % 70),
-    status: 'optimal',
-  }));
 }
 
 // ---------------------------------------------------------------------------

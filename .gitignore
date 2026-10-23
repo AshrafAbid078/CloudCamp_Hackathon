@@ -72,3 +72,6 @@ coverage.xml
 
 # Do NOT ignore synthetic/processed data (keeping as requested)
 # data/raw/ is tracked because CSV datasets are kept locally as requested.
+.local-jwt-secret
+.initial-admin-credential
+*.tsbuildinfo

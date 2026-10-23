@@ -113,19 +113,12 @@ def run_backtest() -> dict:
 
 def test_router():
     print("\n--- Testing Router Endpoint ---")
-    try:
-        response = get_forecast(region="bd", horizon_hours=24)
-        print("Success! Router returned:")
-        print(f"Region: {response['region']}")
-        print(f"Horizon: {response['horizon_hours']}h")
-        print(f"Model: {response['accuracy']['model']}")
-        print(f"RMSE: {response['accuracy']['rmse']}")
-        print(f"MAPE: {response['accuracy']['mape']:.2%}")
-        print(f"Forecast Timestamps count: {len(response['forecast']['timestamps'])}")
-        print(f"First timestamp: {response['forecast']['timestamps'][0]}")
-        print(f"Last timestamp: {response['forecast']['timestamps'][-1]}")
-    except Exception as e:
-        print(f"Router test failed: {e}")
+    response = get_forecast(region="bd", horizon_hours=24)
+    assert response["region"] == "bd"
+    assert response["horizon_hours"] == 24
+    for key in ("timestamps", "solar_ghi_w_m2", "solar_ghi_lower", "solar_ghi_upper", "grid_stress_gco2_kwh"):
+        assert len(response["forecast"][key]) == 24
+    assert response["forecast"]["timestamps"] == sorted(response["forecast"]["timestamps"])
 
 
 if __name__ == "__main__":

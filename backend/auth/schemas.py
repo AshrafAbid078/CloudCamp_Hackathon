@@ -6,7 +6,7 @@ auth/schemas.py — Pydantic Request/Response Models for Auth
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from db.models import UserRole
 
@@ -25,7 +25,7 @@ class LoginRequest(BaseModel):
 class UserCreate(BaseModel):
     """Admin-only: create a new user account."""
     username: str = Field(..., min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_.-]+$")
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(..., min_length=8, max_length=72)
     role: UserRole = UserRole.facility_manager
 
     model_config = {
@@ -38,11 +38,35 @@ class UserCreate(BaseModel):
         }
     }
 
+    @field_validator("password")
+    @classmethod
+    def password_bytes(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password exceeds 72 UTF-8 bytes.")
+        return value
+
+
+class PublicSignup(BaseModel):
+    """Public accounts always receive the facility-manager role."""
+    username: str = Field(..., min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_.-]+$")
+    password: str = Field(..., min_length=8, max_length=72)
+    model_config = {"extra": "forbid"}
+
+    @field_validator("password")
+    @classmethod
+    def password_bytes(cls, value: str) -> str:
+        return UserCreate.password_bytes(value)
+
 
 class PasswordChange(BaseModel):
     """Used by PUT /auth/me/password — current user changes their own password."""
     current_password: str = Field(..., min_length=1)
-    new_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=72)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_bytes(cls, value: str) -> str:
+        return UserCreate.password_bytes(value)
 
 
 # ------------------------------------------------------------------ #

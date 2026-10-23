@@ -21,7 +21,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider"
+            className="text-sm font-medium text-[var(--text-primary)]"
           >
             {label}
           </label>
@@ -36,8 +36,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             id={inputId}
             ref={ref}
             className={cn(
-              'w-full rounded-xl border bg-[var(--bg-surface)] px-4 py-2.5 text-xs sm:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]/60 transition-all',
-              'focus:outline-none focus:ring-2 focus:ring-[var(--accent-solar)]/30 focus:border-[var(--accent-solar)]',
+              'w-full rounded-md border bg-white px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]/60 transition-all',
+              'focus:outline-none focus:ring-2 focus:ring-[var(--accent-clean)]/20 focus:border-[var(--accent-clean)]',
               leftIcon && 'pl-10',
               rightIcon && 'pr-10',
               error

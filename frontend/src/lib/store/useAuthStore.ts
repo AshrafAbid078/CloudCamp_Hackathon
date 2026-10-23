@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User, UserRole, SignupRequest } from '../types';
+import type { User, SignupRequest } from '../types';
 import { authApi } from '../api/client';
 import { useRoleStore } from './useRoleStore';
 
@@ -43,36 +43,22 @@ export const useAuthStore = create<AuthState>((set) => ({
   checkAuth: async () => {
     if (typeof window === 'undefined') return;
     const token = localStorage.getItem('meridian_token');
-    const storedUser = localStorage.getItem('meridian_user');
+    set({ isLoading: true });
 
     if (!token) {
-      set({ isAuthenticated: false, user: null, token: null });
+      set({ isAuthenticated: false, user: null, token: null, isLoading: false });
       return;
-    }
-
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser) as User;
-        set({ isAuthenticated: true, user: parsed, token });
-        if (parsed.role === 'facility_manager' || parsed.role === 'grid_operator') {
-          useRoleStore.getState().setRole(parsed.role);
-        }
-        return;
-      } catch {
-        // Continue to fetch me
-      }
     }
 
     try {
       const me = await authApi.getMe();
-      set({ isAuthenticated: true, user: me, token });
+      set({ isAuthenticated: true, user: me, token, isLoading: false });
       localStorage.setItem('meridian_user', JSON.stringify(me));
-      if (me.role === 'facility_manager' || me.role === 'grid_operator') {
-        useRoleStore.getState().setRole(me.role);
-      }
+      useRoleStore.getState().setRole(me.role);
     } catch {
-      // Keep session if token exists
-      set({ isAuthenticated: true, token });
+      localStorage.removeItem('meridian_token');
+      localStorage.removeItem('meridian_user');
+      set({ isAuthenticated: false, user: null, token: null, isLoading: false });
     }
   },
 
@@ -80,18 +66,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await authApi.login(username, password);
-      const user: User = res.user || {
-        id: 'user-active',
-        name: username.split('@')[0],
-        email: username,
-        role: res.role,
-        facilityLocation: 'Chittagong Industrial Corridor',
-      };
-
       if (typeof window !== 'undefined') {
         localStorage.setItem('meridian_token', res.access_token);
-        localStorage.setItem('meridian_user', JSON.stringify(user));
       }
+      const user = await authApi.getMe();
+      localStorage.setItem('meridian_user', JSON.stringify(user));
 
       set({
         isAuthenticated: true,
@@ -102,12 +81,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
 
       // Synchronize role store
-      if (res.role === 'facility_manager' || res.role === 'grid_operator') {
-        useRoleStore.getState().setRole(res.role);
-      }
+      useRoleStore.getState().setRole(user.role);
 
       return true;
     } catch (err: unknown) {
+      localStorage.removeItem('meridian_token');
+      localStorage.removeItem('meridian_user');
       const message =
         err instanceof Error ? err.message : 'Invalid credentials or login failed';
       set({ isLoading: false, error: message });
@@ -119,18 +98,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await authApi.signup(data);
-      const user: User = res.user || {
-        id: `user-${Date.now()}`,
-        name: data.fullName,
-        email: data.email || data.username,
-        role: data.role,
-        facilityLocation: 'Bangladesh Regional Node',
-      };
-
       if (typeof window !== 'undefined') {
         localStorage.setItem('meridian_token', res.access_token);
-        localStorage.setItem('meridian_user', JSON.stringify(user));
       }
+      const user = await authApi.getMe();
+      localStorage.setItem('meridian_user', JSON.stringify(user));
 
       set({
         isAuthenticated: true,
@@ -140,12 +112,12 @@ export const useAuthStore = create<AuthState>((set) => ({
         error: null,
       });
 
-      if (data.role === 'facility_manager' || data.role === 'grid_operator') {
-        useRoleStore.getState().setRole(data.role as UserRole);
-      }
+      useRoleStore.getState().setRole(user.role);
 
       return true;
     } catch (err: unknown) {
+      localStorage.removeItem('meridian_token');
+      localStorage.removeItem('meridian_user');
       const message =
         err instanceof Error ? err.message : 'Registration failed. Please try again.';
       set({ isLoading: false, error: message });

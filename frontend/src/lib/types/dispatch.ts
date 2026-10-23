@@ -77,6 +77,7 @@ export interface ManualOverrideSubmission {
   assetName: string;
   originalWindow: string;
   proposedWindow: string;
+  horizonHours: number;
   overrideType: 'approve' | 'shift' | 'reject';
   rejectionReason?: string;
   operatorNotes?: string;
@@ -88,8 +89,8 @@ export interface OptimizationRunHistory {
   costSavedUsd: number;
   carbonAvoidedKg: number;
   peakShavedKw: number;
-  solverConvergenceMs: number;
-  status: 'optimal' | 'fallback_heuristic';
+  solverConvergenceMs?: number;
+  status: 'pending' | 'approve' | 'reject';
 }
 
 export interface DispatchInterval {

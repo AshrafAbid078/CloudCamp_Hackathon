@@ -17,8 +17,10 @@ from sqlalchemy import (
     DateTime,
     Enum,
     Float,
+    ForeignKey,
     Integer,
     String,
+    Text,
 )
 from sqlalchemy.types import TypeDecorator
 
@@ -141,6 +143,27 @@ class DispatchRun(Base):
             f"<DispatchRun id={self.id} ts={self.timestamp} "
             f"region={self.region} hours={self.hours}>"
         )
+
+
+class DispatchPlanRecord(Base):
+    """Complete immutable plan for explicit run creation and review."""
+    __tablename__ = "dispatch_plan_records"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(UTCDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_by = Column(String(64), nullable=False)
+    payload_json = Column(Text, nullable=False)
+
+
+class DispatchPlanDecision(Base):
+    """Operator decision on a saved plan; never implies equipment execution."""
+    __tablename__ = "dispatch_plan_decisions"
+
+    run_id = Column(Integer, ForeignKey("dispatch_plan_records.id"), primary_key=True)
+    action = Column(String(16), nullable=False)
+    reason = Column(String(500), nullable=True)
+    decided_by = Column(String(64), nullable=False)
+    decided_at = Column(UTCDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 # ------------------------------------------------------------------ #

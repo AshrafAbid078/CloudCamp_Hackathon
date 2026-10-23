@@ -2,8 +2,9 @@
 Dispatch API Router
 ===================
 Endpoints:
-  GET /dispatch/plan?hours=N    → run the LP optimizer (all authenticated roles)
-  GET /dispatch/history         → last 50 dispatch runs (grid_operator + admin)
+  GET /dispatch/plan?hours=N    → read-only joint optimizer preview
+  POST /dispatch/runs           → persist a complete plan
+  POST /dispatch/scenarios      → compare hypothetical PV inputs
 
 Generates an optimized dispatch plan by:
   1. Calling the real Phase 2 forecast (get_forecast()) for the BD region.
@@ -11,17 +12,20 @@ Generates an optimized dispatch plan by:
   3. Using grid_stress_gco2_kwh from the forecast as the carbon signal.
   4. Loading real synthetic facilities and batteries from parquet files.
   5. Running dispatch_plan() with the real prices, carbon, and assets.
-  6. Logging the result to the dispatch_runs DB table.
+  6. Persisting a plan only for explicit POST requests.
 
-This wires Phase 2 and Phase 3 together — the dispatch optimizer now
-operates on the same signal the frontend and copilot will see.
+This wires the archived forecast and synthetic demo assets into the dispatch optimizer.
 """
 
 import json
 from pathlib import Path
+from typing import Literal, Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from zoneinfo import ZoneInfo
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from dispatch.adapters import IndustrialProcessAdapter, BatteryAdapter
@@ -37,7 +41,7 @@ from forecasting.router import get_forecast
 # ---------------------------------------------------------------------------
 from auth.utils import get_current_user, require_role
 from db.database import get_db
-from db.models import DispatchRun, User, UserRole
+from db.models import DispatchRun, DispatchPlanRecord, DispatchPlanDecision, User, UserRole
 
 router = APIRouter(
     prefix="/dispatch",
@@ -181,6 +185,10 @@ def get_dispatch_plan(
         require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)
     ),
     db: Session = Depends(get_db),
+    record: bool = Query(default=False, description="Deprecated; GET requests never persist a run"),
+    feeder_capacity_kw: float | None = Query(default=None, gt=0, description="Optional measured feeder import limit"),
+    pv_capacity_kw: float = Query(default=0, ge=0, description="Installed PV capacity; zero means no PV model"),
+    base_load_kw: float = Query(default=0, ge=0, description="Measured fixed facility load, if available"),
 ):
     """
     Generate an optimized dispatch plan using the real Phase 2 forecast.
@@ -214,7 +222,7 @@ def get_dispatch_plan(
         # ----------------------------------------------------------
         prices = []
         for ts in timestamps:
-            hour = pd.Timestamp(ts).hour
+            hour = pd.Timestamp(ts).tz_convert(ZoneInfo("Asia/Dhaka")).hour
             prices.append(_TARIFF.get(hour, 0.10))
 
         # ----------------------------------------------------------
@@ -240,25 +248,16 @@ def get_dispatch_plan(
             battery_assets=batteries,
             prices=prices,
             carbon_intensity=carbon_intensity,
+            pv_generation_kw=[min(max(float(ghi), 0) / 1000, 1) * pv_capacity_kw
+                              for ghi in forecast["solar_ghi_w_m2"]],
+            base_load_kw=[base_load_kw] * hours,
+            feeder_capacity_kw=feeder_capacity_kw,
         )
 
         # ----------------------------------------------------------
-        # Step 5: Log this run to the DB
+        # Step 5: Return a read-only preview
         # ----------------------------------------------------------
-        kpis = plan.get("kpis", {})
-        run = DispatchRun(
-            region=region,
-            hours=hours,
-            industrial_count=len(processes),
-            battery_count=len(batteries),
-            cost_saved_usd=kpis.get("cost_saved_usd"),
-            co2_saved_kg=kpis.get("co2_saved_kg"),
-            peak_shaved_kw=kpis.get("peak_shaved_kw"),
-            model_used=forecast_data["accuracy"].get("model"),
-            triggered_by=current_user.username,
-        )
-        db.add(run)
-        db.commit()
+        # POST /dispatch/runs is the only plan creation path.
 
         # ----------------------------------------------------------
         # Step 6: Return result with forecast metadata attached
@@ -267,10 +266,14 @@ def get_dispatch_plan(
             "status": "success",
             "region": region,
             "hours": hours,
-            "run_id": run.id,
+            "assumptions": {"feeder_capacity_kw": feeder_capacity_kw,
+                            "pv_capacity_kw": pv_capacity_kw, "base_load_kw": base_load_kw,
+                            "pv_estimate_only": pv_capacity_kw > 0},
+            "run_id": None,
             "forecast_used": {
                 "model": forecast_data["accuracy"]["model"],
                 "accuracy": forecast_data["accuracy"],
+                "sources": forecast_data.get("sources"),
                 "timestamps": timestamps,
                 "prices_usd_kwh": prices,
                 "carbon_intensity_gco2_kwh": carbon_intensity,
@@ -288,8 +291,158 @@ def get_dispatch_plan(
         raise HTTPException(status_code=500, detail=str(e))
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Plan generation is unavailable. Check forecast and solver readiness.")
+
+
+@router.post("/runs", summary="Create and save a complete dispatch plan")
+def create_dispatch_run(
+    hours: int = Query(default=24, ge=1, le=24),
+    feeder_capacity_kw: float | None = Query(default=None, gt=0),
+    pv_capacity_kw: float = Query(default=0, ge=0),
+    base_load_kw: float = Query(default=0, ge=0),
+    user: User = Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    result = get_dispatch_plan(hours=hours, region="bd", current_user=user, db=db, record=False,
+                               feeder_capacity_kw=feeder_capacity_kw, pv_capacity_kw=pv_capacity_kw,
+                               base_load_kw=base_load_kw)
+    record = DispatchPlanRecord(created_by=user.username, payload_json="")
+    db.add(record)
+    db.flush()
+    result["run_id"] = record.id
+    result["decision"] = "pending"
+    record.payload_json = json.dumps(result)
+    db.commit()
+    return result
+
+
+@router.get("/runs", summary="List saved complete plans")
+def list_dispatch_runs(
+    limit: int = Query(default=50, ge=1, le=200),
+    user: User = Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    query = db.query(DispatchPlanRecord)
+    if user.role == UserRole.facility_manager:
+        query = query.filter(DispatchPlanRecord.created_by == user.username)
+    records = query.order_by(DispatchPlanRecord.id.desc()).limit(limit).all()
+    decisions = {item.run_id: item for item in db.query(DispatchPlanDecision).filter(
+        DispatchPlanDecision.run_id.in_([record.id for record in records])
+    ).all()} if records else {}
+    return {"runs": [
+        {"id": record.id, "created_at": record.created_at.isoformat(),
+         "created_by": record.created_by,
+         "hours": json.loads(record.payload_json)["hours"],
+         "kpis": json.loads(record.payload_json)["plan"]["kpis"],
+         "decision": decisions[record.id].action if record.id in decisions else "pending"}
+        for record in records
+    ]}
+
+
+@router.get("/runs/latest", summary="Retrieve the latest accessible complete plan")
+def get_latest_dispatch_run(
+    hours: int | None = Query(default=None, ge=1, le=24),
+    user: User = Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    query = db.query(DispatchPlanRecord)
+    if user.role == UserRole.facility_manager:
+        query = query.filter(DispatchPlanRecord.created_by == user.username)
+    if hours is not None:
+        query = query.filter(func.json_extract(DispatchPlanRecord.payload_json, "$.hours") == hours)
+    query = query.outerjoin(DispatchPlanDecision, DispatchPlanDecision.run_id == DispatchPlanRecord.id).filter(
+        or_(DispatchPlanDecision.run_id.is_(None), DispatchPlanDecision.action != "reject")
+    )
+    record = query.order_by(DispatchPlanRecord.id.desc()).first()
+    if record is None:
+        raise HTTPException(status_code=404, detail="No saved plan is available.")
+    result = json.loads(record.payload_json)
+    decision = db.query(DispatchPlanDecision).filter(DispatchPlanDecision.run_id == record.id).first()
+    result["decision"] = decision.action if decision else "pending"
+    return result
+
+
+@router.get("/runs/{run_id}", summary="Retrieve a saved complete plan")
+def get_dispatch_run(
+    run_id: int,
+    user: User = Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    record = db.query(DispatchPlanRecord).filter(DispatchPlanRecord.id == run_id).first()
+    if record is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    if user.role == UserRole.facility_manager and record.created_by != user.username:
+        raise HTTPException(status_code=403, detail="Run is not available to this account.")
+    result = json.loads(record.payload_json)
+    decision = db.query(DispatchPlanDecision).filter(DispatchPlanDecision.run_id == record.id).first()
+    result["decision"] = decision.action if decision else "pending"
+    return result
+
+
+class DispatchDecisionPayload(BaseModel):
+    action: Literal["approve", "reject"]
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class DispatchScenarioPayload(BaseModel):
+    horizon_hours: int = Field(default=24, ge=1, le=24)
+    pv_capacity_kw: float = Field(ge=0)
+    base_load_kw: float = Field(default=0, ge=0)
+    feeder_capacity_kw: float | None = Field(default=None, gt=0)
+
+
+@router.post("/scenarios", summary="Compare a hypothetical PV capacity using the joint demo optimizer")
+def compare_dispatch_scenario(
+    body: DispatchScenarioPayload,
+    user: User = Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    common = {"hours": body.horizon_hours, "region": "bd", "current_user": user, "db": db,
+              "record": False, "feeder_capacity_kw": body.feeder_capacity_kw,
+              "base_load_kw": body.base_load_kw}
+    reference = get_dispatch_plan(**common, pv_capacity_kw=0)
+    scenario = get_dispatch_plan(**common, pv_capacity_kw=body.pv_capacity_kw)
+    reference_kpis = reference["plan"]["kpis"]
+    scenario_kpis = scenario["plan"]["kpis"]
+    return {"status": "success", "inputs": body.model_dump(), "forecast_used": scenario["forecast_used"],
+            "reference": reference["plan"], "scenario": scenario["plan"],
+            "change": {"cost_usd": scenario_kpis["optimized_cost"] - reference_kpis["optimized_cost"],
+                       "emissions_kg": (scenario_kpis["optimized_emissions_gco2"] -
+                                        reference_kpis["optimized_emissions_gco2"]) / 1000,
+                       "peak_kw": scenario_kpis["peak_optimized_kw"] - reference_kpis["peak_optimized_kw"]},
+            "note": "Hypothetical capacity-scaled regional GHI forecast; no on-site PV measurement or equipment command."}
+
+
+@router.post("/runs/{run_id}/decision", summary="Record approval or rejection of a saved demo plan")
+def decide_dispatch_run(
+    run_id: int,
+    body: DispatchDecisionPayload,
+    user: User = Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    record = db.query(DispatchPlanRecord).filter(DispatchPlanRecord.id == run_id).first()
+    if record is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    if user.role == UserRole.facility_manager and record.created_by != user.username:
+        raise HTTPException(status_code=403, detail="Run is not available to this account.")
+    if body.action == "reject" and not (body.reason or "").strip():
+        raise HTTPException(status_code=422, detail="A rejection reason is required.")
+    if db.query(DispatchPlanDecision).filter(DispatchPlanDecision.run_id == run_id).first():
+        raise HTTPException(status_code=409, detail="This plan already has a decision.")
+    decision = DispatchPlanDecision(
+        run_id=run_id,
+        action=body.action,
+        reason=body.reason.strip() if body.reason else None,
+        decided_by=user.username,
+    )
+    db.add(decision)
+    db.commit()
+    return {"run_id": run_id, "decision": decision.action, "reason": decision.reason,
+            "decided_by": decision.decided_by, "decided_at": decision.decided_at.isoformat(),
+            "equipment_command_sent": False}
 
 
 # ---------------------------------------------------------------------------
@@ -340,15 +493,16 @@ def get_dispatch_history(
 # POST /dispatch/override  (On-Demand PuLP Re-solve)
 # ---------------------------------------------------------------------------
 
-from pydantic import BaseModel
-from typing import Optional
-
 class ManualOverridePayload(BaseModel):
     asset_id: str
-    forced_start_hour: int
-    forced_duration: Optional[int] = None
-    horizon_hours: int = 24
+    forced_start_hour: int = Field(ge=0, le=23)
+    forced_duration: Optional[int] = Field(default=None, ge=1, le=24)
+    horizon_hours: int = Field(default=24, ge=1, le=24)
     region: str = "bd"
+    reason: Optional[str] = Field(default=None, max_length=500)
+    feeder_capacity_kw: float | None = Field(default=None, gt=0)
+    pv_capacity_kw: float = Field(default=0, ge=0)
+    base_load_kw: float = Field(default=0, ge=0)
 
 @router.post("/override", summary="Apply manual schedule override and re-solve with PuLP")
 def submit_dispatch_override(
@@ -364,8 +518,19 @@ def submit_dispatch_override(
     across all assets, immediately recomputing system KPIs and logging the run.
     """
     try:
-        hours = max(1, min(24, body.horizon_hours))
+        hours = body.horizon_hours
         region = body.region
+
+        target = next((p for p in _ALL_PROCESSES if p.asset_id == body.asset_id), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Asset not found.")
+        if target.deadline > hours:
+            raise HTTPException(status_code=422, detail="Asset does not fit this horizon.")
+        duration = body.forced_duration if body.forced_duration is not None else target.duration
+        if duration != target.duration:
+            raise HTTPException(status_code=422, detail="Changing process duration is not supported.")
+        if not target.earliest_start <= body.forced_start_hour <= target.deadline - duration:
+            raise HTTPException(status_code=422, detail="Start hour is outside the asset operating window.")
 
         forecast_data = get_forecast(region=region, horizon_hours=hours)
         forecast = forecast_data["forecast"]
@@ -374,17 +539,14 @@ def submit_dispatch_override(
 
         prices = []
         for ts in timestamps:
-            hour = pd.Timestamp(ts).hour
+            hour = pd.Timestamp(ts).tz_convert(ZoneInfo("Asia/Dhaka")).hour
             prices.append(_TARIFF.get(hour, 0.10))
 
         # Clone processes and apply override to the targeted asset
         overridden_processes = []
-        target_found = False
         for p in _ALL_PROCESSES:
             if p.asset_id == body.asset_id:
-                target_found = True
-                duration = body.forced_duration or p.duration
-                forced_start = max(0, min(hours - duration, body.forced_start_hour))
+                forced_start = body.forced_start_hour
                 overridden_p = IndustrialProcessAdapter(
                     asset_id=p.asset_id,
                     name=p.name,
@@ -405,6 +567,10 @@ def submit_dispatch_override(
             battery_assets=batteries,
             prices=prices,
             carbon_intensity=carbon_intensity,
+            pv_generation_kw=[min(max(float(ghi), 0) / 1000, 1) * body.pv_capacity_kw
+                              for ghi in forecast["solar_ghi_w_m2"]],
+            base_load_kw=[body.base_load_kw] * hours,
+            feeder_capacity_kw=body.feeder_capacity_kw,
         )
 
         kpis = plan.get("kpis", {})
@@ -420,21 +586,26 @@ def submit_dispatch_override(
             triggered_by=f"{current_user.username} [override: {body.asset_id}]",
         )
         db.add(run)
-        db.commit()
 
-        return {
+        result = {
             "status": "success",
             "region": region,
             "hours": hours,
-            "run_id": run.id,
+            "assumptions": {"feeder_capacity_kw": body.feeder_capacity_kw,
+                            "pv_capacity_kw": body.pv_capacity_kw, "base_load_kw": body.base_load_kw,
+                            "pv_estimate_only": body.pv_capacity_kw > 0},
+            "run_id": None,
             "override_applied": {
                 "asset_id": body.asset_id,
                 "forced_start_hour": body.forced_start_hour,
-                "found": target_found,
+                "found": True,
+                "duration": duration,
+                "reason": body.reason,
             },
             "forecast_used": {
                 "model": forecast_data["accuracy"]["model"],
                 "accuracy": forecast_data["accuracy"],
+                "sources": forecast_data.get("sources"),
                 "timestamps": timestamps,
                 "prices_usd_kwh": prices,
                 "carbon_intensity_gco2_kwh": carbon_intensity,
@@ -445,5 +616,19 @@ def submit_dispatch_override(
             },
             "plan": plan,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        saved = DispatchPlanRecord(created_by=current_user.username, payload_json="")
+        db.add(saved)
+        db.flush()
+        result["run_id"] = saved.id
+        result["decision"] = "pending"
+        saved.payload_json = json.dumps(result)
+        db.commit()
+        return result
+    except HTTPException:
+        raise
+    except NotImplementedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Override could not be applied.")

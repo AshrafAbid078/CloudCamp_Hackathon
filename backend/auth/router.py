@@ -12,20 +12,22 @@ Endpoints:
 Role hierarchy enforced via require_role() from auth.utils.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from config import settings
 from db.database import get_db
 from db.models import User, UserRole
-from auth.schemas import LoginRequest, PasswordChange, Token, UserCreate, UserOut
+from auth.schemas import LoginRequest, PasswordChange, Token, UserCreate, UserOut, PublicSignup
 from auth.utils import (
     create_access_token,
     get_current_user,
     hash_password,
+    password_version,
     require_role,
     verify_password,
 )
+from auth.rate_limit import limit_auth_request
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -35,7 +37,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 # ------------------------------------------------------------------ #
 
 @router.post("/login", response_model=Token, summary="Obtain a JWT access token")
-def login(body: LoginRequest, db: Session = Depends(get_db)):
+def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """
     Authenticate with username + password and receive a signed JWT.
 
@@ -45,6 +47,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     ```
     Tokens expire after `ACCESS_TOKEN_EXPIRE_MINUTES` (default: 60 min).
     """
+    limit_auth_request(request, "login")
     user = db.query(User).filter(User.username == body.username).first()
 
     if not user or not verify_password(body.password, user.hashed_password):
@@ -60,7 +63,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
             detail="Account is deactivated. Contact an administrator.",
         )
 
-    token = create_access_token({"sub": user.username, "role": user.role.value})
+    token = create_access_token({"sub": user.username, "role": user.role.value, "pwd": password_version(user.hashed_password)})
     return Token(
         access_token=token,
         token_type="bearer",
@@ -212,13 +215,15 @@ def deactivate_user(
     summary="Public user signup",
 )
 def signup(
-    body: UserCreate,
+    body: PublicSignup,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """
     Public registration endpoint for new facility managers and grid operators.
     Returns signed JWT access token upon successful creation.
     """
+    limit_auth_request(request, "signup")
     existing = db.query(User).filter(User.username == body.username).first()
     if existing:
         raise HTTPException(
@@ -229,7 +234,7 @@ def signup(
     user = User(
         username=body.username,
         hashed_password=hash_password(body.password),
-        role=body.role,
+        role=UserRole.facility_manager,
         must_change_password=False,
         is_active=True,
     )
@@ -237,7 +242,7 @@ def signup(
     db.commit()
     db.refresh(user)
 
-    token = create_access_token({"sub": user.username, "role": user.role.value})
+    token = create_access_token({"sub": user.username, "role": user.role.value, "pwd": password_version(user.hashed_password)})
     return Token(
         access_token=token,
         token_type="bearer",
