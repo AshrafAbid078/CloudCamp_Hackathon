@@ -70,8 +70,19 @@ coverage.xml
 *.cover
 *.py,cover
 
-# Do NOT ignore synthetic/processed data (keeping as requested)
-# data/raw/ is tracked because CSV datasets are kept locally as requested.
+# Keep runtime data/processed and data/synthetic in Git. Raw source CSVs are
+# retained locally for rebuilding datasets but are not needed by the deployed app.
+/data/raw/
+
+# Local submission materials, visual concepts, and internal working documents.
+/docs/submission/
+/docs/design/
+/docs/team/
+/docs/reference/
+/docs/development/
+/docs/ai-ml/
+/frontend/scripts/capture-submission-video.mjs
+
 .local-jwt-secret
 .initial-admin-credential
 *.tsbuildinfo

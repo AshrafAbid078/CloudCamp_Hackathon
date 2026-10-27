@@ -30,6 +30,7 @@ from auth.utils import hash_password, verify_password
 from auth.router import router as auth_router
 from forecasting.router import router as forecast_router
 from dispatch.api import router as dispatch_router
+from showcase.router import router as showcase_router, _document as ensure_showcase_document
 from poller.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -41,12 +42,14 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------ #
 
 def _seed_admin(db: Session) -> None:
-    """Create a random, first-login admin credential for a fresh database."""
+    """Create a first-login admin credential for a fresh database."""
     old_admin = db.query(User).filter(User.username == "admin").first()
     if db.query(User).count() == 0 or (old_admin and verify_password("admin123", old_admin.hashed_password)):
-        credential = secrets.token_urlsafe(24)
-        path = Path(__file__).resolve().parent / ".initial-admin-credential"
-        path.write_text(f"admin:{credential}\n", encoding="utf-8")
+        credential = settings.initial_admin_password or secrets.token_urlsafe(24)
+        if not settings.initial_admin_password:
+            path = Path(__file__).resolve().parent / ".initial-admin-credential"
+            path.write_text(f"admin:{credential}\n", encoding="utf-8")
+            logger.warning("Initial admin credential written to %s; change it at first sign-in.", path)
         if old_admin:
             old_admin.hashed_password = hash_password(credential)
             old_admin.must_change_password = True
@@ -59,7 +62,8 @@ def _seed_admin(db: Session) -> None:
                 is_active=True,
             ))
         db.commit()
-        logger.warning("Initial admin credential written to %s; change it at first sign-in.", path)
+        if settings.initial_admin_password:
+            logger.warning("Initial admin credential loaded from environment; change it at first sign-in.")
 
 
 @asynccontextmanager
@@ -75,6 +79,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         _seed_admin(db)                # create default admin if DB is empty
+        ensure_showcase_document(db)   # create the scheduled documentation draft
     finally:
         db.close()
 
@@ -116,6 +121,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(forecast_router)
 app.include_router(dispatch_router)
+app.include_router(showcase_router)
 
 
 # ------------------------------------------------------------------ #

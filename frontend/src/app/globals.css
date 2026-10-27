@@ -70,5 +70,9 @@ a { text-decoration: none; }
 .form-control { width:100%; border:1px solid #cbd7df; border-radius:6px; padding:12px 14px; background:white; color:var(--text-primary); }
 .form-control:focus { border-color:var(--accent-clean); outline:2px solid #137d7625; }
 .workspace-footer { color:#8a9aad; font-size:12px; padding:18px 0 28px; }
+.docs-richtext p, .docs-richtext div { margin: .55rem 0; }
+.docs-richtext ul { list-style: disc; margin: .55rem 0; padding-left: 1.4rem; }
+.docs-richtext ol { list-style: decimal; margin: .55rem 0; padding-left: 1.4rem; }
+.docs-richtext a { color: var(--accent-clean); text-decoration: underline; }
 @media(max-width:700px){ .metric-strip { grid-template-columns:1fr; gap:18px; } .metric-strip > div { padding:0 0 17px; border-right:0; border-bottom:1px solid var(--border-hairline); } .metric-strip > div:last-child { border-bottom:0; padding-bottom:0; } }
 @media(prefers-reduced-motion:reduce){ *, *::before, *::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }

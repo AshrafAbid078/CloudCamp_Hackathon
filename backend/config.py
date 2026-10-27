@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     secret_key: str = Field(default_factory=_local_secret)
     """JWT signing key. Must be changed before any public deployment."""
 
+    initial_admin_password: str = ""
+    """Optional first-login admin password for hosted deployments. Set before the first start."""
+
     algorithm: str = "HS256"
     """JWT signing algorithm."""
 
@@ -94,6 +97,13 @@ class Settings(BaseSettings):
     def strong_secret(cls, value: str) -> str:
         if len(value) < 32 or value == "CHANGE_ME_IN_PRODUCTION_USE_32_CHAR_RANDOM_STRING":
             raise ValueError("Set a unique SECRET_KEY of at least 32 characters.")
+        return value
+
+    @field_validator("initial_admin_password")
+    @classmethod
+    def strong_initial_admin_password(cls, value: str) -> str:
+        if value and len(value) < 20:
+            raise ValueError("Set INITIAL_ADMIN_PASSWORD to at least 20 characters.")
         return value
 
 

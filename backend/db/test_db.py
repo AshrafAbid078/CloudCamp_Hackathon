@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from db.database import Base
 from db.models import CarbonSnapshot, DispatchRun, User, UserRole
+from auth.utils import verify_password
 
 
 @pytest.fixture()
@@ -111,8 +112,10 @@ def test_poller_skips_duplicate_reading(session_factory, monkeypatch):
         db.close()
 
 
-def test_seed_admin_only_when_empty(session_factory):
+def test_seed_admin_only_when_empty(session_factory, monkeypatch):
     import main
+
+    monkeypatch.setattr(main.settings, "initial_admin_password", "deployment-bootstrap-password-123")
 
     db = session_factory()
     try:
@@ -121,6 +124,7 @@ def test_seed_admin_only_when_empty(session_factory):
         admin = db.query(User).first()
         assert admin.role == UserRole.admin
         assert admin.must_change_password is True
+        assert verify_password("deployment-bootstrap-password-123", admin.hashed_password)
 
         # Second call must not create another user.
         main._seed_admin(db)

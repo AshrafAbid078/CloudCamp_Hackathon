@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Clock3, Database, Home, LineChart, MapPin, Settings, SlidersHorizontal, Sparkles, X } from 'lucide-react';
+import { BookOpen, Clock3, Database, Home, LineChart, MapPin, Settings, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { useRoleStore } from '@/lib/store/useRoleStore';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { Brand } from './brand';
@@ -17,6 +17,7 @@ const primary = [
 const secondary = [
   { href: '/copilot', label: 'Scenarios', icon: Sparkles },
   { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/docs', label: 'Documentation', icon: BookOpen },
 ];
 
 export function Sidebar() {
@@ -38,7 +39,7 @@ export function Sidebar() {
       </div>
       <nav aria-label="Workspace" className="space-y-1 px-3 pt-4">{items(primary)}</nav>
       <div className="mx-5 mt-7 border-t border-white/15" />
-      <nav aria-label="Account and tools" className="space-y-1 px-3 pt-5">{items(secondary)}</nav>
+      <nav aria-label="Account and tools" className="space-y-1 px-3 pt-5">{items(secondary)}{user?.role === 'admin' && <Link href="/docs-admin" onClick={() => setSidebarOpen(false)} aria-current={pathname === '/docs-admin' ? 'page' : undefined} className={`flex items-center gap-3 rounded-md px-3 py-3 text-sm transition-colors ${pathname === '/docs-admin' ? 'bg-[#2b465e] text-white' : 'text-[#c0ccda] hover:bg-[#233b50] hover:text-white'}`}><BookOpen size={19} strokeWidth={1.8} /><span>Docs admin</span></Link>}</nav>
       <div className="mt-auto border-t border-white/15 px-7 py-6 text-xs text-[#b5c6d5]">
         <div className="mb-5 flex items-start gap-2"><MapPin size={18} className="shrink-0" /><span>Bangladesh<br /><small>Synthetic asset pool</small></span></div>
         <div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full border border-white/25 bg-[#344f67] font-bold text-white">{(user?.name ?? 'U').slice(0, 2).toUpperCase()}</span><span className="truncate">{user?.name ?? 'Account'}<small className="block capitalize text-[#aebfce]">{user?.role?.replaceAll('_', ' ')}</small></span></div>

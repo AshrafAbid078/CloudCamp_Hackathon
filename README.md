@@ -5,9 +5,9 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Optimization](https://img.shields.io/badge/MILP_Solver-PuLP%20%2F%20HiGHS-orange?style=for-the-badge)](https://github.com/coin-or/pulp)
 
 <p align="center">
@@ -25,10 +25,6 @@
 ---
 
 </div>
-
-<p align="center">
-  <img src="docs/design/dashboard-overview-v2.png" alt="Meridian Grid Dashboard Overview" width="920" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);"/>
-</p>
 
 ## 📌 Executive Summary
 
@@ -65,22 +61,16 @@ Industrial facilities and commercial microgrids face high peak-demand electricit
   - `admin`: User provisioning, role assignment, system health monitoring.
 - **Cryptographic Standards**: Salted bcrypt password hashing and stateless JWT bearer token authentication.
 
-### 🎨 State-of-the-Art Next.js 14 Web Interface
+### 🎨 Next.js 16 Web Interface
 - **Next.js App Router & Tailwind CSS**: Modern glassmorphism aesthetic with high contrast data visualizations.
 - **Interactive Gantt & Time-Series Charts**: Real-time visual schedule inspection powered by Recharts.
 - **Live KPI Simulator**: Instant financial and carbon savings comparisons against baseline "run-immediately" scenarios.
 
 ---
 
-## 🖼️ Product Showcase
+## 🖥️ Product Walkthrough
 
-| Landing & Value Proposition | Dispatch Optimization & Gantt |
-| :---: | :---: |
-| ![Landing Page](docs/design/full-suite-v2/01-landing.png) | ![Dispatch Schedule](docs/design/full-suite-v2/06-dispatch.png) |
-
-| Solar & Weather Forecasting | Carbon Telemetry & Data Provenance |
-| :---: | :---: |
-| ![Forecast View](docs/design/full-suite-v2/05-forecast.png) | ![Data Ledger](docs/design/full-suite-v2/10-data.png) |
+The running frontend includes a public landing page and authenticated dashboard, forecast, dispatch, history, and data-source views. Administrators can edit and schedule the public `/docs` showcase at `/docs-admin`. Design concepts and submission media are kept outside the GitHub repository; use the deployed application to evaluate the implemented screens.
 
 ---
 
@@ -102,7 +92,7 @@ flowchart TD
         DB[(SQLite / SQLAlchemy<br/>Snapshots & Runs)]
     end
 
-    subgraph Frontend["Next.js 14 Presentation Layer"]
+    subgraph Frontend["Next.js 16 Presentation Layer"]
         AuthUI["Secure Auth<br/>(Login / Role Guard)"]
         DashboardUI["Operations Dashboard<br/>(KPI Cards & Telemetry)"]
         DispatchUI["Dispatch Studio<br/>(Interactive Gantt & Overrides)"]
@@ -142,18 +132,17 @@ CloudCamp/
 │   └── requirements.txt      # Python dependencies
 ├── frontend/
 │   ├── src/
-│   │   ├── app/              # Next.js 14 App Router pages (Auth, Dashboard, Dispatch)
+│   │   ├── app/              # Next.js 16 App Router pages (Auth, Dashboard, Dispatch)
 │   │   ├── components/       # Reusable UI, Gantt charts, KPI metrics, layout
 │   │   ├── hooks/            # Custom React hooks (role verification, theme)
 │   │   ├── lib/              # API clients, state stores, adapters, TypeScript types
 │   │   └── styles/           # Global styles and design tokens
 │   ├── package.json          # Node.js dependencies and build scripts
 │   └── tailwind.config.ts    # Tailwind CSS design system configuration
-├── data/                     # Historical NSRDB samples, synthetic facility profiles
-├── docs/                     # Comprehensive architecture, design, and API documentation
-│   ├── architecture/         # System architecture & frontend design specs
-│   ├── design/               # UI mockups, screen gallery, and visual assets
-│   └── development/          # Live data setup guides and review documentation
+├── data/                     # Processed historical data and synthetic demo assets
+├── docs/                     # Public architecture and product documentation
+│   ├── architecture/         # System architecture and frontend design specs
+│   └── product/              # Product concept and application flow
 └── pytest.ini                # Pytest configuration
 ```
 
@@ -163,7 +152,7 @@ CloudCamp/
 
 ### Prerequisites
 - **Python**: 3.11 or higher
-- **Node.js**: 18.x or higher (`npm` included)
+- **Node.js**: 20.9 or higher (`npm` included)
 - **Git**
 
 ### 1. Clone & Configure
@@ -212,14 +201,37 @@ npm run dev
 
 ---
 
+## ☁️ Deploy with Vercel + Railway
+
+This repository uses **Railway Railpack** for FastAPI and **Vercel** for Next.js. The Railway service must use the **repository root** (`/`) because the backend reads `data/processed` and `data/synthetic` beside `backend/`. The root `requirements.txt`, `.python-version`, and `railpack.json` configure its Python build and start command.
+
+1. Push the reviewed changes to GitHub. Keep `.env`, `backend/meridian.db`, `.local-jwt-secret`, and `.initial-admin-credential` private; `.gitignore` excludes them.
+2. In Railway, create a service from this GitHub repository. Set **Root Directory** to `/` (the repository root) and use **Railpack**. Attach a volume at `/app/storage` **before the first deploy**, then set these service variables:
+
+   | Variable | Value |
+   | --- | --- |
+   | `DB_PATH` | `/app/storage/meridian.db` |
+   | `SECRET_KEY` | A unique random string of at least 32 characters; never commit it. |
+   | `INITIAL_ADMIN_PASSWORD` | A unique first-login password of at least 20 characters. |
+   | `CORS_ORIGINS` | The final Vercel origin, such as `https://your-app.vercel.app` (no trailing slash). |
+   | `ELECTRICITY_MAPS_API_KEY` | Optional; omit if you do not have zone access. |
+
+   Railway's `PORT` is used by the Railpack start command. Generate a public Railway domain in the service's Networking settings. The local SQLite database is **not** uploaded; the deployed instance starts with a fresh database. Sign in as `admin` with `INITIAL_ADMIN_PASSWORD` and change it immediately. After the change, remove `INITIAL_ADMIN_PASSWORD` from Railway and redeploy; the existing account remains in the volume.
+3. In Vercel, import the same GitHub repository with **Root Directory** set to `frontend`. Set `NEXT_PUBLIC_API_URL` to the full Railway HTTPS origin, without a trailing slash. Set `API_INTERNAL_URL` to the same origin for the server-rendered `/docs` availability check. Deploy the frontend. If Vercel assigns a different final URL, update Railway `CORS_ORIGINS` to match it exactly and redeploy the backend.
+4. Check the Railway `/health` endpoint and the Vercel login, forecast, dispatch, and data pages. `/health` can report `degraded` when optional live carbon access is unavailable; inspect `forecast_ready`, `solver_ready`, and `assets_loaded` separately. The public `/docs` page is scheduled for **10–14 June 2027, Asia/Dhaka** by default. To show it during a different judging window, sign in as admin, open `/docs-admin`, set the window, and publish the draft. Verify `/docs` in a signed-out browser before sharing its link.
+
+Railway's free trial has a limited credit and duration; monitor the service's usage. Its attached volume preserves the SQLite database across normal redeploys. See the [Railway FastAPI guide](https://docs.railway.com/guides/fastapi), [volume guide](https://docs.railway.com/volumes), and [Vercel monorepo guide](https://vercel.com/docs/monorepos).
+
+---
+
 ## 📡 Key API Endpoints
 
 | Method | Endpoint | Description | Access |
 |---|---|---|---|
 | `POST` | `/auth/login` | Authenticate user and receive JWT access token | Public |
-| `POST` | `/auth/signup` | Register a new facility account | Public |
+| `POST` | `/auth/register` | Create a user account | Admin |
 | `GET` | `/auth/me` | Fetch currently authenticated user profile | Authenticated |
-| `GET` | `/forecasting/forecast` | Retrieve solar irradiance and generation forecast | Authenticated |
+| `GET` | `/forecast/bd` | Retrieve solar irradiance and generation forecast | Authenticated |
 | `POST` | `/dispatch/runs` | Execute MILP optimization solver over specified horizon | Authenticated |
 | `GET` | `/dispatch/runs/latest` | Fetch the most recent optimized dispatch plan | Authenticated |
 | `POST` | `/dispatch/override` | Apply operator manual adjustments to asset schedules | Facility Manager / Admin |

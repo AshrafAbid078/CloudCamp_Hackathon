@@ -200,3 +200,28 @@ class CarbonSnapshot(Base):
             f"<CarbonSnapshot id={self.id} region={self.region} "
             f"ci={self.carbon_intensity_gco2eq_kwh:.1f} polled={self.polled_at}>"
         )
+
+
+class ShowcaseDocument(Base):
+    """Single editable showcase document and its publishing gate."""
+    __tablename__ = "showcase_document"
+
+    id = Column(Integer, primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    starts_at = Column(UTCDateTime(), nullable=True)
+    ends_at = Column(UTCDateTime(), nullable=True)
+    draft_json = Column(Text, nullable=False)
+    published_json = Column(Text, nullable=True)
+    version = Column(Integer, nullable=False, default=0)
+    updated_at = Column(UTCDateTime(), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class ShowcaseVersion(Base):
+    """Immutable copy of each published showcase revision."""
+    __tablename__ = "showcase_versions"
+
+    id = Column(Integer, primary_key=True)
+    version = Column(Integer, nullable=False, unique=True)
+    content_json = Column(Text, nullable=False)
+    published_by = Column(String(64), nullable=False)
+    published_at = Column(UTCDateTime(), nullable=False, default=lambda: datetime.now(timezone.utc))
