@@ -223,27 +223,6 @@ The frontend runs on Vercel, the FastAPI backend runs on a Render Python web ser
 
 Render Free sleeps after inactivity, so its in-process Electricity Maps scheduler cannot poll reliably while the service is asleep. The API can use its labelled archived carbon fallback. Set `ELECTRICITY_MAPS_API_KEY` only after rotating the key that appeared in Git history. Test a full login, dispatch history write, restart, and read-back to verify Turso persistence. The `sqlalchemy-libsql` driver supports Linux/macOS, so the hosted connection must be validated on Render; local Windows tests cover the SQLite path and configuration.
 
-## Alternative: Deploy with Vercel + Railway
-
-This repository uses **Railway Railpack** for FastAPI and **Vercel** for Next.js. The Railway service must use the **repository root** (`/`) because the backend reads `data/processed` and `data/synthetic` beside `backend/`. The root `requirements.txt`, `.python-version`, and `railpack.json` configure its Python build and start command.
-
-1. Push the reviewed changes to GitHub. Keep `.env`, `backend/meridian.db`, `.local-jwt-secret`, and `.initial-admin-credential` private; `.gitignore` excludes them.
-2. In Railway, create a service from this GitHub repository. Set **Root Directory** to `/` (the repository root) and use **Railpack**. Attach a volume at `/app/storage` **before the first deploy**, then set these service variables:
-
-   | Variable | Value |
-   | --- | --- |
-   | `DB_PATH` | `/app/storage/meridian.db` |
-   | `SECRET_KEY` | A unique random string of at least 32 characters; never commit it. |
-   | `INITIAL_ADMIN_PASSWORD` | A unique first-login password of at least 20 characters. |
-   | `CORS_ORIGINS` | The final Vercel origin, such as `https://your-app.vercel.app` (no trailing slash). |
-   | `ELECTRICITY_MAPS_API_KEY` | Optional; omit if you do not have zone access. |
-
-   Railway's `PORT` is used by the Railpack start command. Generate a public Railway domain in the service's Networking settings. The local SQLite database is **not** uploaded; the deployed instance starts with a fresh database. Sign in as `admin` with `INITIAL_ADMIN_PASSWORD` and change it immediately. After the change, remove `INITIAL_ADMIN_PASSWORD` from Railway and redeploy; the existing account remains in the volume.
-3. In Vercel, import the same GitHub repository with **Root Directory** set to `frontend`. Set `NEXT_PUBLIC_API_URL` to the full Railway HTTPS origin, without a trailing slash. Set `API_INTERNAL_URL` to the same origin for the server-rendered `/docs` availability check. Deploy the frontend. If Vercel assigns a different final URL, update Railway `CORS_ORIGINS` to match it exactly and redeploy the backend.
-4. Check the Railway `/health` endpoint and the Vercel login, forecast, dispatch, and data pages. `/health` can report `degraded` when optional live carbon access is unavailable; inspect `forecast_ready`, `solver_ready`, and `assets_loaded` separately. The public `/docs` page is scheduled for **10–14 June 2027, Asia/Dhaka** by default. To show it during a different judging window, sign in as admin, open `/docs-admin`, set the window, and publish the draft. Verify `/docs` in a signed-out browser before sharing its link.
-
-Railway's free trial has a limited credit and duration; monitor the service's usage. Its attached volume preserves the SQLite database across normal redeploys. See the [Railway FastAPI guide](https://docs.railway.com/guides/fastapi), [volume guide](https://docs.railway.com/volumes), and [Vercel monorepo guide](https://vercel.com/docs/monorepos).
-
 ---
 
 ## 📡 Key API Endpoints
