@@ -1,18 +1,19 @@
 """
 db/database.py — SQLAlchemy Engine & Session
 =============================================
-SQLite-backed persistence layer for Meridian Grid.
+SQLite-compatible persistence layer for Meridian Grid.
 
 Tables created here (via init_db):
   - users          → auth.User
   - dispatch_runs  → DispatchRun history
   - carbon_snapshots → auto-polled Electricity Maps data
 
-The DB file lives at backend/meridian.db (configurable via DB_PATH in .env).
+Local development uses backend/meridian.db; hosted deployments can use Turso.
 """
 
 from pathlib import Path
 from typing import Generator
+from urllib.parse import urlsplit
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -23,24 +24,28 @@ from config import settings
 # Engine setup                                                         #
 # ------------------------------------------------------------------ #
 
-# Resolve the DB file path relative to the backend/ directory so it
-# works regardless of where uvicorn is launched from.
-_BACKEND_DIR = Path(__file__).resolve().parents[1]   # backend/
-_DB_FILE = Path(settings.db_path)
+def _engine_config() -> tuple[str, dict]:
+    """Select the hosted Turso dialect or the existing local SQLite file."""
+    if settings.turso_database_url or settings.turso_auth_token:
+        if not settings.turso_database_url or not settings.turso_auth_token:
+            raise ValueError("Set both TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.")
+        parsed = urlsplit(settings.turso_database_url)
+        if parsed.scheme != "libsql" or not parsed.netloc or parsed.path or parsed.query or parsed.fragment:
+            raise ValueError("TURSO_DATABASE_URL must be a libsql:// host URL without a path or query.")
+        # The libsql SQLAlchemy dialect maps a secure URL to HTTPS.
+        url = f"sqlite+libsql://{parsed.netloc}?secure=true"
+        return url, {"connect_args": {"auth_token": settings.turso_auth_token}}
 
-if not _DB_FILE.is_absolute():
-    _DB_FILE = _BACKEND_DIR / _DB_FILE
+    backend_dir = Path(__file__).resolve().parents[1]
+    db_file = Path(settings.db_path)
+    if not db_file.is_absolute():
+        db_file = backend_dir / db_file
+    # The scheduler writes while requests read. Wait briefly for SQLite locks.
+    return f"sqlite:///{db_file}", {"connect_args": {"check_same_thread": False, "timeout": 30}}
 
-DATABASE_URL = f"sqlite:///{_DB_FILE}"
 
-engine = create_engine(
-    DATABASE_URL,
-    # check_same_thread=False: required for SQLite + FastAPI.
-    # timeout: the background poller thread writes while requests read, so
-    # wait up to 30s for a lock instead of failing with "database is locked".
-    connect_args={"check_same_thread": False, "timeout": 30},
-    echo=False,                                  # set True to log SQL statements
-)
+DATABASE_URL, _ENGINE_OPTIONS = _engine_config()
+engine = create_engine(DATABASE_URL, echo=False, **_ENGINE_OPTIONS)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     An absolute path is also accepted.
     """
 
+    turso_database_url: str = ""
+    """Hosted database URL (libsql://...). Empty keeps the local SQLite file."""
+
+    turso_auth_token: str = ""
+    """Read/write token for the hosted Turso database. Never commit this value."""
+
     # ------------------------------------------------------------------ #
     # Electricity Maps poller                                              #
     # ------------------------------------------------------------------ #

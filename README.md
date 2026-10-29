@@ -201,7 +201,29 @@ npm run dev
 
 ---
 
-## ☁️ Deploy with Vercel + Railway
+## Deploy with Vercel + Render + Turso
+
+The frontend runs on Vercel, the FastAPI backend runs on a Render Python web service, and Turso stores the SQLite-compatible application database. Local development still uses `backend/meridian.db` when the Turso variables are unset. A fresh Turso database starts empty; the local SQLite file is not uploaded automatically.
+
+1. Create a Turso Cloud database and a **Read & Write** database token. Keep the token private.
+2. Push the backend changes to GitHub. In Render, create a **Web Service** from this repository's `main` branch. Use **Root Directory `/`**, **Runtime Python 3**, **Region Singapore**, and **Free** instance type. Build command: `pip install -r requirements.txt`. Start command: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`.
+3. Set these Render environment variables before relying on the service:
+
+   | Variable | Value |
+   | --- | --- |
+   | `TURSO_DATABASE_URL` | The database URL from Turso, beginning with `libsql://`. |
+   | `TURSO_AUTH_TOKEN` | The private Read & Write token from Turso. |
+   | `SECRET_KEY` | A unique random string of at least 32 characters. |
+   | `INITIAL_ADMIN_PASSWORD` | A unique first-login password of at least 20 characters. |
+   | `CORS_ORIGINS` | The final Vercel HTTPS origin, with no trailing slash. |
+   | `PYTHON_VERSION` | `3.11.11` (the Turso SQLAlchemy driver does not support Render's newer default Python). |
+
+   Generate `SECRET_KEY` with `python -c "import secrets; print(secrets.token_hex(32))"`. Never add these secrets to Git. Render assigns a public `onrender.com` URL; verify its `/health` endpoint. Use the `admin` username and `INITIAL_ADMIN_PASSWORD` for first sign-in, change the password immediately, then remove `INITIAL_ADMIN_PASSWORD` from Render and redeploy.
+4. Import the same repository into Vercel with **Root Directory `frontend`**. Set `NEXT_PUBLIC_API_URL` and `API_INTERNAL_URL` to the Render HTTPS origin without a trailing slash. Deploy. If Vercel assigns a different production origin, update Render `CORS_ORIGINS` and redeploy.
+
+Render Free sleeps after inactivity, so its in-process Electricity Maps scheduler cannot poll reliably while the service is asleep. The API can use its labelled archived carbon fallback. Set `ELECTRICITY_MAPS_API_KEY` only after rotating the key that appeared in Git history. Test a full login, dispatch history write, restart, and read-back to verify Turso persistence. The `sqlalchemy-libsql` driver supports Linux/macOS, so the hosted connection must be validated on Render; local Windows tests cover the SQLite path and configuration.
+
+## Alternative: Deploy with Vercel + Railway
 
 This repository uses **Railway Railpack** for FastAPI and **Vercel** for Next.js. The Railway service must use the **repository root** (`/`) because the backend reads `data/processed` and `data/synthetic` beside `backend/`. The root `requirements.txt`, `.python-version`, and `railpack.json` configure its Python build and start command.
 

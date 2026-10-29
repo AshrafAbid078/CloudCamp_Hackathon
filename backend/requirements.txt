@@ -21,7 +21,8 @@ joblib==1.5.3
 pulp==3.3.0
 
 # Database (Phase 4)
-sqlalchemy>=2.0         # ORM + SQLite engine
+sqlalchemy>=2.0,<2.1     # ORM + SQLite/libSQL dialect compatibility
+sqlalchemy-libsql==0.2.0; sys_platform != "win32"  # Turso driver supports Linux/macOS
 alembic>=1.13.0         # Database migrations
 
 # Auth (Phase 4)
