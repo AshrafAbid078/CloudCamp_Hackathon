@@ -5,7 +5,7 @@
 # Web framework
 fastapi==0.141.1
 uvicorn==0.51.0
-httpx>=0.27.0          # required by FastAPI TestClient
+httpx>=0.27.0          # required by FastAPI TestClient and LLM calls
 
 # Data
 pandas==3.0.5
@@ -32,6 +32,9 @@ bcrypt>=4.0                       # password hashing (used directly; passlib is 
 # Background poller (Phase 4)
 apscheduler>=3.10       # recurring background jobs
 requests>=2.31          # Electricity Maps HTTP calls
+
+# AI Agent & Model Context Protocol (Phase 5)
+mcp>=1.0.0              # Anthropic/OpenAI Model Context Protocol standard
 
 # Config
 pydantic-settings>=2.0  # .env → Settings class

@@ -86,6 +86,15 @@ class Settings(BaseSettings):
     """Minimum interval between upstream API requests for one forecast source."""
 
     # ------------------------------------------------------------------ #
+    # AI Copilot & Agent (Phase 5)                                         #
+    # ------------------------------------------------------------------ #
+    gemini_api_key: str = ""
+    """Google Gemini API key for Phase 5 AI Copilot and MCP Agent layer."""
+
+    copilot_model: str = "gemini-2.5-flash"
+    """Default generative model used for copilot reasoning and tool execution."""
+
+    # ------------------------------------------------------------------ #
     # CORS                                                                 #
     # ------------------------------------------------------------------ #
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"

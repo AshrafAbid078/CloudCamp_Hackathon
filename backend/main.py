@@ -5,6 +5,7 @@ Single FastAPI app that mounts all service routers:
   - /auth/...          →  Auth: login, register, user management
   - /forecast/{region} →  Phase 2: Solar + grid-stress forecast
   - /dispatch/...      →  Phase 3: Dispatch / optimization + history
+  - /copilot/...       →  Phase 5: Grounded AI Copilot & MCP Tools
   - /health            →  Phase 5: Smoke test gate
 
 Run with:
@@ -32,6 +33,7 @@ from forecasting.router import router as forecast_router
 from dispatch.api import router as dispatch_router
 from showcase.router import router as showcase_router, _document as ensure_showcase_document
 from poller.scheduler import start_scheduler, stop_scheduler
+from agent.router import router as agent_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -73,43 +75,60 @@ async def lifespan(app: FastAPI):
     accepts requests, and teardown after it stops.
     """
     # ---- Startup ----
-    logger.info("Initialising database...")
-    init_db()                          # create tables if they don't exist
+    logger.info("Initializing Meridian Grid backend...")
+    init_db()
 
+    # Seed admin credential if needed
     db = SessionLocal()
     try:
-        _seed_admin(db)                # create default admin if DB is empty
-        ensure_showcase_document(db)   # create the scheduled documentation draft
+        _seed_admin(db)
+        ensure_showcase_document(db)
     finally:
         db.close()
 
-    logger.info("Starting background scheduler...")
-    start_scheduler()                  # begin Electricity Maps polling
+    # Start Electricity Maps background poller if API key is present
+    if settings.electricity_maps_api_key:
+        logger.info(
+            "Electricity Maps API key configured. Starting poller (interval: %dh, region: %s)...",
+            settings.poll_interval_hours,
+            settings.poll_region,
+        )
+        start_scheduler()
+    else:
+        logger.info("No Electricity Maps API key configured. Poller disabled; serving verified archive/cache.")
 
-    logger.info("✅ Meridian Grid API is ready.")
+    logger.info("Meridian Grid backend ready.")
     yield
 
     # ---- Shutdown ----
-    stop_scheduler()
-    logger.info("Meridian Grid API stopped.")
+    logger.info("Shutting down Meridian Grid backend...")
+    if settings.electricity_maps_api_key:
+        stop_scheduler()
+    logger.info("Shutdown complete.")
 
 
 # ------------------------------------------------------------------ #
-# App factory                                                          #
+# FastAPI App Instance                                                 #
 # ------------------------------------------------------------------ #
 
 app = FastAPI(
-    title="Meridian Grid API",
-    version="1.0.0",
+    title="Meridian Grid — Energy Orchestration Engine",
     description=(
-        "AI-powered solar + grid-stress forecasting and "
-        "asset dispatch optimization for Bangladesh. "
-        "\n\nFresh local databases receive a generated first-login admin credential."
+        "Universal Flexible-Load Orchestration & Carbon-Aware Dispatch Engine.\n\n"
+        "- **Auth**: JWT authentication and role-based access control.\n"
+        "- **Forecasting**: Live Open-Meteo GHI & Electricity Maps carbon intensity.\n"
+        "- **Dispatch**: PuLP MILP solver for flexible industrial processes and batteries.\n"
+        "- **Copilot**: Grounded AI Agent using Google Gemini & Model Context Protocol (MCP) tools.\n"
+        "- **Showcase**: Markdown-backed technical architecture documentation.\n"
     ),
+    version="1.2.0",
     lifespan=lifespan,
 )
 
-# Allow the browser frontend (default http://localhost:3000) to call the API.
+# ------------------------------------------------------------------ #
+# CORS Middleware                                                      #
+# ------------------------------------------------------------------ #
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
@@ -122,6 +141,7 @@ app.include_router(auth_router)
 app.include_router(forecast_router)
 app.include_router(dispatch_router)
 app.include_router(showcase_router)
+app.include_router(agent_router)
 
 
 # ------------------------------------------------------------------ #
@@ -153,10 +173,11 @@ def health():
     assets_loaded = bool(_ALL_PROCESSES or _ALL_BATTERIES)
     return {
         "status": "available" if forecast_ready and solver_ready and assets_loaded and forecast_model == "OpenMeteoForecast" and forecast_sources and forecast_sources.get("carbon") == "electricity_maps_v4_forecast" else "degraded",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "forecast_model": forecast_model,
         "forecast_sources": forecast_sources,
         "solver_version": pulp.__version__,
+        "copilot_mcp_ready": True,
         "forecast_ready": forecast_ready,
         "solver_ready": solver_ready,
         "assets_loaded": assets_loaded,
@@ -172,6 +193,7 @@ def root():
             "auth": ["POST /auth/login", "POST /auth/signup", "GET /auth/me", "PUT /auth/me/password"],
             "forecast": ["GET /forecast/{region}?horizon_hours=24"],
             "dispatch": ["GET /dispatch/plan?hours=24", "GET /dispatch/history"],
+            "copilot": ["POST /copilot/chat", "GET /copilot/tools"],
             "admin": ["POST /auth/register", "GET /auth/users", "DELETE /auth/users/{id}"],
             "meta": ["GET /health"],
         },

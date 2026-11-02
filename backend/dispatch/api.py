@@ -208,6 +208,10 @@ def get_dispatch_plan(
     - `forecast_used`: the actual forecast signal the optimizer ran on.
     """
     try:
+        feeder_capacity_kw = float(feeder_capacity_kw) if isinstance(feeder_capacity_kw, (int, float)) else None
+        pv_capacity_kw = float(pv_capacity_kw) if isinstance(pv_capacity_kw, (int, float)) else 0.0
+        base_load_kw = float(base_load_kw) if isinstance(base_load_kw, (int, float)) else 0.0
+
         # ----------------------------------------------------------
         # Step 1: Get the real forecast from Phase 2
         # ----------------------------------------------------------
@@ -414,6 +418,76 @@ def compare_dispatch_scenario(
                                         reference_kpis["optimized_emissions_gco2"]) / 1000,
                        "peak_kw": scenario_kpis["peak_optimized_kw"] - reference_kpis["peak_optimized_kw"]},
             "note": "Hypothetical capacity-scaled regional GHI forecast; no on-site PV measurement or equipment command."}
+
+
+class CustomAssetPayload(BaseModel):
+    name: str = Field(..., min_length=2, max_length=64, description="Custom machine name")
+    power_kw: float = Field(..., gt=0, le=5000, description="Rated power in kW")
+    duration_hours: int = Field(..., ge=1, le=24, description="Operating duration in hours")
+    deadline_hour: int = Field(..., ge=1, le=24, description="Deadline hour (1-24)")
+    earliest_start_hour: int = Field(default=0, ge=0, le=23, description="Earliest allowable start slot")
+
+
+@router.post("/custom-asset", summary="Solve dispatch schedule including a dynamically added factory asset")
+def dispatch_with_custom_asset(
+    body: CustomAssetPayload,
+    user: User = Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    if body.earliest_start_hour + body.duration_hours > body.deadline_hour:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Infeasible: start {body.earliest_start_hour} + duration {body.duration_hours} exceeds deadline {body.deadline_hour}."
+        )
+
+    forecast_data = get_forecast(region="bd", horizon_hours=24)
+    forecast = forecast_data["forecast"]
+    timestamps = forecast["timestamps"]
+    carbon_intensity = forecast["grid_stress_gco2_kwh"]
+
+    prices = []
+    for ts in timestamps:
+        hour = pd.Timestamp(ts).tz_convert(ZoneInfo("Asia/Dhaka")).hour
+        prices.append(_TARIFF.get(hour, 0.10))
+
+    custom_id = f"custom-{abs(hash(body.name)) % 10000}"
+    custom_adapter = IndustrialProcessAdapter(
+        asset_id=custom_id,
+        name=body.name,
+        power_kw=body.power_kw,
+        earliest_start=body.earliest_start_hour,
+        deadline=body.deadline_hour,
+        duration=body.duration_hours,
+    )
+    processes = _filter_processes(_ALL_PROCESSES, 24) + [custom_adapter]
+    batteries = _ALL_BATTERIES
+
+    plan = dispatch_plan(
+        industrial_assets=processes,
+        battery_assets=batteries,
+        prices=prices,
+        carbon_intensity=carbon_intensity,
+        pv_generation_kw=[0.0] * 24,
+        base_load_kw=[0.0] * 24,
+        feeder_capacity_kw=None,
+    )
+
+    custom_schedule = next((p for p in plan["industrial"] if p["asset_id"] == custom_id), None)
+
+    return {
+        "status": "success",
+        "custom_asset": {
+            "name": body.name,
+            "power_kw": body.power_kw,
+            "duration_hours": body.duration_hours,
+            "deadline_hour": body.deadline_hour,
+            "optimal_start_hour": (custom_schedule["optimized_hours"][0] if custom_schedule and custom_schedule["optimized_hours"] else None),
+            "optimal_hours": custom_schedule["optimized_hours"] if custom_schedule else [],
+            "cost_saved_usd": custom_schedule["cost_saved"] if custom_schedule else 0.0,
+        },
+        "system_kpis": plan["kpis"],
+        "plan": plan,
+    }
 
 
 @router.post("/runs/{run_id}/decision", summary="Record approval or rejection of a saved demo plan")

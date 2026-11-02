@@ -61,6 +61,19 @@ Industrial facilities and commercial microgrids face high peak-demand electricit
   - `admin`: User provisioning, role assignment, system health monitoring.
 - **Cryptographic Standards**: Salted bcrypt password hashing and stateless JWT bearer token authentication.
 
+### 🤖 Grounded AI Copilot & FastMCP Protocol
+- **Google Gemini 2.5 Flash**: Multi-turn grounded function-calling copilot tailored for facility managers and grid operators.
+- **Model Context Protocol (FastMCP)**: Standardized agent tool interface exposing live solar/carbon forecasts, dispatch schedules, what-if scenario simulations, and constraint explainability.
+- **Resilient Fallback**: Zero-hallucination deterministic fallback engine if external LLM or network is inaccessible.
+
+### 🌐 Bilingual Localization & Zero-Auth Public Showcase
+- **English & Bengali (বাংলা)**: Native language toggle for local industrial plant engineers and international judges alike.
+- **Public Showcase (`/about`, `/docs`)**: Immediate zero-authentication access explaining the Bangladesh RMG TOU tariff context, system mechanics, and fail-safe offline docs rendering.
+
+### 📈 Quantile Solar Forecasting & Dynamic Machine Ingestion
+- **Probabilistic Irradiance**: $P_{10}$ (cloudy worst-case), $P_{50}$ (expected median), and $P_{90}$ (clearsky upper bound) quantiles.
+- **Custom Asset Ingestion**: Add dynamic industrial machines on-the-fly via `POST /dispatch/custom-asset` with automatic joint MILP re-scheduling and savings calculation.
+
 ### 🎨 Next.js 16 Web Interface
 - **Next.js App Router & Tailwind CSS**: Modern glassmorphism aesthetic with high contrast data visualizations.
 - **Interactive Gantt & Time-Series Charts**: Real-time visual schedule inspection powered by Recharts.
@@ -232,12 +245,21 @@ Render Free sleeps after inactivity, so its in-process Electricity Maps schedule
 | `POST` | `/auth/login` | Authenticate user and receive JWT access token | Public |
 | `POST` | `/auth/register` | Create a user account | Admin |
 | `GET` | `/auth/me` | Fetch currently authenticated user profile | Authenticated |
-| `GET` | `/forecast/bd` | Retrieve solar irradiance and generation forecast | Authenticated |
+| `GET` | `/forecast/bd` | Retrieve solar irradiance, $P_{10}/P_{50}/P_{90}$ and generation forecast | Authenticated |
 | `POST` | `/dispatch/runs` | Execute MILP optimization solver over specified horizon | Authenticated |
 | `GET` | `/dispatch/runs/latest` | Fetch the most recent optimized dispatch plan | Authenticated |
 | `POST` | `/dispatch/override` | Apply operator manual adjustments to asset schedules | Facility Manager / Admin |
+| `POST` | `/dispatch/custom-asset` | Dynamically onboard new machine & re-solve MILP schedule | Authenticated / Demo |
+| `POST` | `/copilot/chat` | AI Copilot conversational function-calling assistant | Public Demo / Auth |
+| `GET` | `/copilot/tools` | Enumerate available FastMCP agent tools & schemas | Public |
 | `GET` | `/data/carbon-snapshots` | Query historical grid carbon intensity telemetry ledger | Authenticated |
 | `GET` | `/health` | Verify solver, forecast engine, and system readiness | Public |
+
+> 📚 **Developer & Auditor Documentation**:
+> - [Master System Audit & Handover Guide](file:///docs/MASTER_SYSTEM_AUDIT_AND_DEV_GUIDE.md)
+> - [AI Copilot & FastMCP Specification](file:///docs/architecture/PHASE_5_COPILOT_AND_MCP_SPEC.md)
+> - [Phase 7 Advanced Features Specification](file:///docs/architecture/PHASE_7_ADVANCED_FEATURES_SPEC.md)
+> - [System Showcase & Operations Guide](file:///docs/product/SYSTEM_SHOWCASE_AND_OPERATIONS_GUIDE.md)
 
 ---
 

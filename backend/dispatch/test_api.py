@@ -101,3 +101,23 @@ def test_dispatch_reads_do_not_write_and_post_saves_kpis():
 
 if __name__ == "__main__":
     test_dispatch_api()
+
+
+def test_dispatch_custom_asset():
+    payload = {
+        "name": "Test Dyeing Vessel 5",
+        "power_kw": 120.0,
+        "duration_hours": 3,
+        "deadline_hour": 16,
+        "earliest_start_hour": 0,
+    }
+    response = client.post("/dispatch/custom-asset", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "custom_asset" in data
+    ca = data["custom_asset"]
+    assert ca["name"] == "Test Dyeing Vessel 5"
+    assert ca["power_kw"] == 120.0
+    assert ca["optimal_start_hour"] is not None
+    assert ca["optimal_start_hour"] + 3 <= 16

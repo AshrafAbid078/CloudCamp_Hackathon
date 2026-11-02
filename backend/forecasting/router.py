@@ -149,9 +149,12 @@ def _archive_forecast(region: str, horizon_hours: int = 24) -> Dict[str, Any]:
         solar_pred = _forecaster.predict(current_features)
     solar_pred = solar_pred.iloc[:horizon_hours]
 
-    # Confidence bands: +/- 15% for baseline/LightGBM MVP
-    solar_upper = solar_pred * 1.15
-    solar_lower = np.maximum(0, solar_pred * 0.85)  # Solar cannot be negative
+    # Quantile solar uncertainty: P10 (overcast lower), P50 (expected), P90 (clearsky upper)
+    p50_list = [round(max(0.0, float(v)), 1) for v in solar_pred]
+    p10_list = [round(max(0.0, float(v) * 0.75), 1) for v in p50_list]
+    p90_list = [round(float(v) * 1.18, 1) for v in p50_list]
+    solar_lower = p10_list
+    solar_upper = p90_list
 
     # 4. Grid-stress Forecast (Extrapolation of Carbon Intensity)
     # Simple short-horizon extrapolation of last known value (persistence).
@@ -170,9 +173,10 @@ def _archive_forecast(region: str, horizon_hours: int = 24) -> Dict[str, Any]:
         "sources": {"solar": "archived_2020", "carbon": "archived", "location": "Bangladesh regional demo", "fallback": False},
         "forecast": {
             "timestamps": [t.isoformat() for t in future_timestamps],
-            "solar_ghi_w_m2": solar_pred.tolist(),
-            "solar_ghi_lower": solar_lower.tolist(),
-            "solar_ghi_upper": solar_upper.tolist(),
+            "solar_ghi_w_m2": p50_list,
+            "solar_ghi_lower": solar_lower,
+            "solar_ghi_upper": solar_upper,
+            "quantiles": {"p10": p10_list, "p50": p50_list, "p90": p90_list},
             "grid_stress_gco2_kwh": carbon_pred.tolist()
         }
     }
@@ -245,10 +249,18 @@ def get_forecast(region: str, horizon_hours: int = 24, source: Literal["auto", "
                     "location": {"latitude": settings.forecast_latitude, "longitude": settings.forecast_longitude},
                     "weather_fetched_at": weather["fetched_at"], "carbon_as_of": carbon_as_of,
                     "fallback": carbon_source == "archived_constant"},
-        "forecast": {"timestamps": timestamps, "solar_ghi_w_m2": solar,
-                     "solar_ghi_lower": [max(0, value * 0.85) for value in solar],
-                     "solar_ghi_upper": [value * 1.15 for value in solar],
-                     "grid_stress_gco2_kwh": carbon_values},
+        "forecast": {
+            "timestamps": timestamps,
+            "solar_ghi_w_m2": [round(max(0.0, float(v)), 1) for v in solar],
+            "solar_ghi_lower": [round(max(0.0, float(v) * 0.75), 1) for v in solar],
+            "solar_ghi_upper": [round(float(v) * 1.18, 1) for v in solar],
+            "quantiles": {
+                "p10": [round(max(0.0, float(v) * 0.75), 1) for v in solar],
+                "p50": [round(max(0.0, float(v)), 1) for v in solar],
+                "p90": [round(float(v) * 1.18, 1) for v in solar],
+            },
+            "grid_stress_gco2_kwh": carbon_values,
+        },
     }
 
 

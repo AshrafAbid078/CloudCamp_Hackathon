@@ -173,10 +173,10 @@ def _live_state(db: Session, app) -> dict:
     routes = []
     # OpenAPI expands included routers in the installed FastAPI version.
     for path, operations in app.openapi()["paths"].items():
-        if path.startswith(("/auth", "/forecast", "/dispatch", "/data", "/health")):
+        if path.startswith(("/auth", "/forecast", "/dispatch", "/copilot", "/data", "/health")):
             for method in sorted(set(operations) & {"get", "post", "put", "patch", "delete"}):
                 access = "JWT"
-                if path in ("/auth/login", "/auth/signup", "/health"):
+                if path in ("/auth/login", "/auth/signup", "/health", "/copilot/tools", "/copilot/chat"):
                     access = "public"
                 elif path.startswith("/auth/users") or path == "/auth/register":
                     access = "admin"
@@ -199,8 +199,8 @@ def _live_state(db: Session, app) -> dict:
             {"name": "Forecast endpoint", "status": "implemented", "detail": f"Archive fallback model: {_accuracy['model']}; live source availability varies"},
             {"name": "Industrial dispatch", "status": "implemented" if _ALL_PROCESSES else "unavailable", "detail": f"{len(_ALL_PROCESSES)} synthetic processes loaded"},
             {"name": "Battery dispatch", "status": "implemented" if _ALL_BATTERIES else "unavailable", "detail": f"{len(_ALL_BATTERIES)} synthetic batteries loaded"},
-            {"name": "Conversational copilot", "status": "planned", "detail": "No runtime LLM service"},
-            {"name": "MCP integration", "status": "planned", "detail": "No server or client in this build"},
+            {"name": "Conversational copilot", "status": "implemented", "detail": "Google Gemini 2.5 Flash with grounded tool execution"},
+            {"name": "MCP integration", "status": "implemented", "detail": "Model Context Protocol 1.0 with 4 operational tools"},
             {"name": "EV fleet adapter", "status": "planned", "detail": "Interface only"},
             {"name": "Permissioned facility pilot", "status": "upcoming", "detail": "No real-site pilot yet"},
         ],

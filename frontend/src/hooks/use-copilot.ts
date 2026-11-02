@@ -1,6 +1,7 @@
 'use client';
 
 import { useAppStore } from '@/lib/store';
+import { useRoleStore } from '@/lib/store/useRoleStore';
 import { copilotApi } from '@/lib/api';
 
 export function useCopilot() {
@@ -25,18 +26,21 @@ export function useCopilot() {
     setCopilotLoading(true);
 
     try {
-      // 2. Fetch intelligent response
-      const assistantMessage = await copilotApi.sendQuery(userPrompt);
+      const activeRole = useRoleStore.getState().role;
+      // 2. Fetch intelligent grounded response from Gemini + MCP tools
+      const assistantMessage = await copilotApi.sendQuery(userPrompt, activeRole);
       addCopilotMessage({
         sender: 'assistant',
         content: assistantMessage.content,
         citations: assistantMessage.citations,
         suggestedActions: assistantMessage.suggestedActions,
+        toolCalls: assistantMessage.toolCalls,
+        rolePerspective: assistantMessage.rolePerspective,
       });
     } catch {
       addCopilotMessage({
         sender: 'system',
-        content: 'Error: Failed to reach the Copilot inference gateway. Please check network telemetry.',
+        content: 'Error: Failed to reach the Copilot inference gateway. Please check backend connection.',
       });
     } finally {
       setCopilotLoading(false);

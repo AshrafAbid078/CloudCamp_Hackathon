@@ -108,12 +108,64 @@ export const dispatchApi = {
     const res = await apiClient<{ runs: { id: number; created_at: string; decision: OptimizationRunHistory['status']; kpis: BackendDispatchPlanResponse['plan']['kpis'] }[] }>(`/dispatch/runs?limit=${limit}`);
     return res.runs.map(run => ({ runId: `RUN-${run.id}`, timestamp: run.created_at, costSavedUsd: run.kpis.cost_saved_usd, carbonAvoidedKg: run.kpis.co2_saved_kg, peakShavedKw: run.kpis.peak_shaved_kw, status: run.decision }));
   },
+
+  addCustomAsset: async (payload: {
+    name: string;
+    power_kw: number;
+    duration_hours: number;
+    deadline_hour: number;
+    earliest_start_hour?: number;
+  }) => {
+    return apiClient<{
+      status: string;
+      custom_asset: {
+        name: string;
+        power_kw: number;
+        duration_hours: number;
+        deadline_hour: number;
+        optimal_start_hour: number | null;
+        optimal_hours: number[];
+        cost_saved_usd: number;
+      };
+      system_kpis: BackendDispatchPlanResponse['plan']['kpis'];
+      plan: BackendDispatchPlanResponse['plan'];
+    }>('/dispatch/custom-asset', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
+interface BackendCopilotResponse {
+  status: string;
+  role: string;
+  reply: string;
+  tool_calls: Array<{
+    tool: string;
+    args?: Record<string, string | number | boolean>;
+    result?: unknown;
+  }>;
+}
+
 export const copilotApi = {
-  sendQuery: async (prompt: string): Promise<CopilotMessage> => {
-    void prompt;
-    throw new Error('Copilot is planned and has no connected inference service yet.');
+  sendQuery: async (prompt: string, role?: string): Promise<CopilotMessage> => {
+    const res = await apiClient<BackendCopilotResponse>('/copilot/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message: prompt, role }),
+    });
+    return {
+      id: `copilot-${Date.now()}`,
+      sender: 'assistant',
+      content: res.reply,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      rolePerspective: (res.role as 'facility_manager' | 'grid_operator') || 'facility_manager',
+      toolCalls: (res.tool_calls || []).map((tc) => ({
+        toolName: (tc.tool === 'get_solar_forecast' ? 'get_forecast' : tc.tool === 'get_dispatch_schedule' ? 'get_dispatch_plan' : tc.tool === 'simulate_whatif' ? 'run_whatif' : 'explain_decision'),
+        args: tc.args || {},
+        outputSummary: typeof tc.result === 'object' ? JSON.stringify(tc.result) : String(tc.result || ''),
+        durationMs: 120,
+      })),
+    };
   },
   runWhatIf: async (): Promise<WhatIfSimulationResponse> => {
     throw new Error('Scenario simulation is not available yet.');
