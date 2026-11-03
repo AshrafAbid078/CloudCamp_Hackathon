@@ -5,14 +5,13 @@ import { usePathname } from 'next/navigation';
 import { BookOpen, Clock3, Database, Home, LineChart, MapPin, Settings, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { useRoleStore } from '@/lib/store/useRoleStore';
 import { useAuthStore } from '@/lib/store/useAuthStore';
-import { useLanguageStore } from '@/lib/store/useLanguageStore';
+import { t } from '@/lib/ui-copy';
 import { Brand } from './brand';
 
 export function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore(state => state.user);
   const { isSidebarOpen, setSidebarOpen } = useRoleStore();
-  const t = useLanguageStore(state => state.t);
 
   const primary = [
     { href: '/dashboard', label: t('navDashboard'), icon: Home },
@@ -25,7 +24,7 @@ export function Sidebar() {
   const secondary = [
     { href: '/copilot', label: t('navCopilot'), icon: Sparkles },
     { href: '/settings', label: t('navSettings'), icon: Settings },
-    { href: '/docs', label: t('navDocs'), icon: BookOpen },
+    { href: '/guide', label: t('navDocs'), icon: BookOpen },
   ];
 
   const items = (links: typeof primary) => links.map(({ href, label, icon: Icon }) =>

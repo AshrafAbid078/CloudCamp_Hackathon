@@ -5,8 +5,10 @@ import { Button, Input, Modal } from '@/components/common';
 import { dispatchApi } from '@/lib/api';
 import { AlertTriangle } from 'lucide-react';
 import { useRole } from '@/hooks';
+import type { CustomAssetInput } from '@/lib/types/dispatch';
 
 interface OverridePanelProps {
+  customAssets?: CustomAssetInput[];
   initialAssetId?: string;
   initialAssetName?: string;
   initialWindow?: string;
@@ -17,6 +19,7 @@ interface OverridePanelProps {
 }
 
 export function OverridePanel({
+  customAssets,
   initialAssetId = 'ind-vat-2',
   initialAssetName = 'Textile Finishing Dye-Vat #2',
   initialWindow = '11:30 – 15:00',
@@ -44,6 +47,7 @@ export function OverridePanel({
         originalWindow: initialWindow,
         proposedWindow: proposedWindow,
         horizonHours,
+        customAssets,
         overrideType: 'shift',
         rejectionReason: reason,
         operatorNotes: `Authorized by ${role}`,

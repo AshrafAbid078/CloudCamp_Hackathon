@@ -18,12 +18,13 @@ This wires the archived forecast and synthetic demo assets into the dispatch opt
 """
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Literal, Optional
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -169,6 +170,44 @@ def _filter_processes(
 # GET /dispatch/plan
 # ---------------------------------------------------------------------------
 
+class CustomAssetDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, str_strip_whitespace=True)
+    name: str = Field(min_length=2, max_length=64)
+    power_kw: float = Field(gt=0, le=5000)
+    duration_hours: int = Field(ge=1, le=24)
+    deadline_hour: int = Field(ge=1, le=24)
+    earliest_start_hour: int = Field(default=0, ge=0, le=23)
+
+    @model_validator(mode="after")
+    def feasible_window(self):
+        if self.earliest_start_hour + self.duration_hours > self.deadline_hour:
+            raise ValueError("The machine cannot finish before its deadline.")
+        return self
+
+
+class DispatchRunPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    custom_assets: list[CustomAssetDefinition] = Field(default_factory=list, max_length=10)
+
+
+class CustomAssetPayload(CustomAssetDefinition):
+    horizon_hours: int = Field(default=24, ge=1, le=24)
+    existing_assets: list[CustomAssetDefinition] = Field(default_factory=list, max_length=9)
+
+
+def _custom_adapters(assets: list[CustomAssetDefinition], hours: int) -> list[IndustrialProcessAdapter]:
+    result = []
+    for index, asset in enumerate(assets):
+        if asset.deadline_hour > hours:
+            raise ValueError("Custom machine deadline exceeds the selected horizon.")
+        digest = hashlib.sha256(asset.model_dump_json().encode()).hexdigest()[:12]
+        result.append(IndustrialProcessAdapter(
+            asset_id=f"custom-{index}-{digest}", name=asset.name, power_kw=asset.power_kw,
+            earliest_start=asset.earliest_start_hour, deadline=asset.deadline_hour,
+            duration=asset.duration_hours))
+    return result
+
+
 @router.get("/plan")
 def get_dispatch_plan(
     hours: int = Query(
@@ -207,6 +246,12 @@ def get_dispatch_plan(
     - `kpis`: system-level totals.
     - `forecast_used`: the actual forecast signal the optimizer ran on.
     """
+    return _build_dispatch_plan(hours, region, feeder_capacity_kw, pv_capacity_kw, base_load_kw)
+
+
+def _build_dispatch_plan(hours: int, region: str = "bd", feeder_capacity_kw: float | None = None,
+                         pv_capacity_kw: float = 0, base_load_kw: float = 0,
+                         custom_assets: list[CustomAssetDefinition] | None = None):
     try:
         feeder_capacity_kw = float(feeder_capacity_kw) if isinstance(feeder_capacity_kw, (int, float)) else None
         pv_capacity_kw = float(pv_capacity_kw) if isinstance(pv_capacity_kw, (int, float)) else 0.0
@@ -232,7 +277,7 @@ def get_dispatch_plan(
         # ----------------------------------------------------------
         # Step 3: Filter assets that fit inside the horizon
         # ----------------------------------------------------------
-        processes = _filter_processes(_ALL_PROCESSES, hours)
+        processes = _filter_processes(_ALL_PROCESSES, hours) + _custom_adapters(custom_assets or [], hours)
         batteries = _ALL_BATTERIES
 
         if not processes and not batteries:
@@ -272,7 +317,8 @@ def get_dispatch_plan(
             "hours": hours,
             "assumptions": {"feeder_capacity_kw": feeder_capacity_kw,
                             "pv_capacity_kw": pv_capacity_kw, "base_load_kw": base_load_kw,
-                            "pv_estimate_only": pv_capacity_kw > 0},
+                            "pv_estimate_only": pv_capacity_kw > 0,
+                            "custom_assets": [a.model_dump() for a in custom_assets or []]},
             "run_id": None,
             "forecast_used": {
                 "model": forecast_data["accuracy"]["model"],
@@ -303,6 +349,7 @@ def get_dispatch_plan(
 
 @router.post("/runs", summary="Create and save a complete dispatch plan")
 def create_dispatch_run(
+    body: DispatchRunPayload | None = Body(default=None),
     hours: int = Query(default=24, ge=1, le=24),
     feeder_capacity_kw: float | None = Query(default=None, gt=0),
     pv_capacity_kw: float = Query(default=0, ge=0),
@@ -310,9 +357,8 @@ def create_dispatch_run(
     user: User = Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
     db: Session = Depends(get_db),
 ):
-    result = get_dispatch_plan(hours=hours, region="bd", current_user=user, db=db, record=False,
-                               feeder_capacity_kw=feeder_capacity_kw, pv_capacity_kw=pv_capacity_kw,
-                               base_load_kw=base_load_kw)
+    result = _build_dispatch_plan(hours, "bd", feeder_capacity_kw, pv_capacity_kw, base_load_kw,
+                                  body.custom_assets if body else [])
     record = DispatchPlanRecord(created_by=user.username, payload_json="")
     db.add(record)
     db.flush()
@@ -420,74 +466,22 @@ def compare_dispatch_scenario(
             "note": "Hypothetical capacity-scaled regional GHI forecast; no on-site PV measurement or equipment command."}
 
 
-class CustomAssetPayload(BaseModel):
-    name: str = Field(..., min_length=2, max_length=64, description="Custom machine name")
-    power_kw: float = Field(..., gt=0, le=5000, description="Rated power in kW")
-    duration_hours: int = Field(..., ge=1, le=24, description="Operating duration in hours")
-    deadline_hour: int = Field(..., ge=1, le=24, description="Deadline hour (1-24)")
-    earliest_start_hour: int = Field(default=0, ge=0, le=23, description="Earliest allowable start slot")
-
-
-@router.post("/custom-asset", summary="Solve dispatch schedule including a dynamically added factory asset")
+@router.post("/custom-asset", summary="Preview the full portfolio with custom factory machines")
 def dispatch_with_custom_asset(
     body: CustomAssetPayload,
     user: User = Depends(require_role(UserRole.facility_manager, UserRole.grid_operator, UserRole.admin)),
     db: Session = Depends(get_db),
 ):
-    if body.earliest_start_hour + body.duration_hours > body.deadline_hour:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Infeasible: start {body.earliest_start_hour} + duration {body.duration_hours} exceeds deadline {body.deadline_hour}."
-        )
-
-    forecast_data = get_forecast(region="bd", horizon_hours=24)
-    forecast = forecast_data["forecast"]
-    timestamps = forecast["timestamps"]
-    carbon_intensity = forecast["grid_stress_gco2_kwh"]
-
-    prices = []
-    for ts in timestamps:
-        hour = pd.Timestamp(ts).tz_convert(ZoneInfo("Asia/Dhaka")).hour
-        prices.append(_TARIFF.get(hour, 0.10))
-
-    custom_id = f"custom-{abs(hash(body.name)) % 10000}"
-    custom_adapter = IndustrialProcessAdapter(
-        asset_id=custom_id,
-        name=body.name,
-        power_kw=body.power_kw,
-        earliest_start=body.earliest_start_hour,
-        deadline=body.deadline_hour,
-        duration=body.duration_hours,
-    )
-    processes = _filter_processes(_ALL_PROCESSES, 24) + [custom_adapter]
-    batteries = _ALL_BATTERIES
-
-    plan = dispatch_plan(
-        industrial_assets=processes,
-        battery_assets=batteries,
-        prices=prices,
-        carbon_intensity=carbon_intensity,
-        pv_generation_kw=[0.0] * 24,
-        base_load_kw=[0.0] * 24,
-        feeder_capacity_kw=None,
-    )
-
-    custom_schedule = next((p for p in plan["industrial"] if p["asset_id"] == custom_id), None)
-
-    return {
-        "status": "success",
-        "custom_asset": {
-            "name": body.name,
-            "power_kw": body.power_kw,
-            "duration_hours": body.duration_hours,
-            "deadline_hour": body.deadline_hour,
-            "optimal_start_hour": (custom_schedule["optimized_hours"][0] if custom_schedule and custom_schedule["optimized_hours"] else None),
-            "optimal_hours": custom_schedule["optimized_hours"] if custom_schedule else [],
-            "cost_saved_usd": custom_schedule["cost_saved"] if custom_schedule else 0.0,
-        },
-        "system_kpis": plan["kpis"],
-        "plan": plan,
+    asset = CustomAssetDefinition.model_validate(body.model_dump(exclude={"horizon_hours", "existing_assets"}))
+    result = _build_dispatch_plan(body.horizon_hours, custom_assets=[*body.existing_assets, asset])
+    scheduled = result["plan"]["industrial"][-1]
+    result["custom_asset"] = {
+        **asset.model_dump(), "asset_id": scheduled["asset_id"],
+        "optimal_start_hour": scheduled["optimized_hours"][0],
+        "optimal_hours": scheduled["optimized_hours"], "cost_saved_usd": scheduled["cost_saved"],
     }
+    result["system_kpis"] = result["plan"]["kpis"]
+    return result
 
 
 @router.post("/runs/{run_id}/decision", summary="Record approval or rejection of a saved demo plan")
@@ -577,6 +571,7 @@ class ManualOverridePayload(BaseModel):
     feeder_capacity_kw: float | None = Field(default=None, gt=0)
     pv_capacity_kw: float = Field(default=0, ge=0)
     base_load_kw: float = Field(default=0, ge=0)
+    custom_assets: list[CustomAssetDefinition] = Field(default_factory=list, max_length=10)
 
 @router.post("/override", summary="Apply manual schedule override and re-solve with PuLP")
 def submit_dispatch_override(
@@ -595,7 +590,8 @@ def submit_dispatch_override(
         hours = body.horizon_hours
         region = body.region
 
-        target = next((p for p in _ALL_PROCESSES if p.asset_id == body.asset_id), None)
+        portfolio = _ALL_PROCESSES + _custom_adapters(body.custom_assets, hours)
+        target = next((p for p in portfolio if p.asset_id == body.asset_id), None)
         if target is None:
             raise HTTPException(status_code=404, detail="Asset not found.")
         if target.deadline > hours:
@@ -618,7 +614,7 @@ def submit_dispatch_override(
 
         # Clone processes and apply override to the targeted asset
         overridden_processes = []
-        for p in _ALL_PROCESSES:
+        for p in portfolio:
             if p.asset_id == body.asset_id:
                 forced_start = body.forced_start_hour
                 overridden_p = IndustrialProcessAdapter(
@@ -667,7 +663,8 @@ def submit_dispatch_override(
             "hours": hours,
             "assumptions": {"feeder_capacity_kw": body.feeder_capacity_kw,
                             "pv_capacity_kw": body.pv_capacity_kw, "base_load_kw": body.base_load_kw,
-                            "pv_estimate_only": body.pv_capacity_kw > 0},
+                            "pv_estimate_only": body.pv_capacity_kw > 0,
+                            "custom_assets": [a.model_dump() for a in body.custom_assets]},
             "run_id": None,
             "override_applied": {
                 "asset_id": body.asset_id,

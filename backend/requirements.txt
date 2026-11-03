@@ -34,7 +34,7 @@ apscheduler>=3.10       # recurring background jobs
 requests>=2.31          # Electricity Maps HTTP calls
 
 # AI Agent & Model Context Protocol (Phase 5)
-mcp>=1.0.0              # Anthropic/OpenAI Model Context Protocol standard
+mcp==1.30.0            # verified stdio MCP runtime (same tools as the Copilot)
 
 # Config
 pydantic-settings>=2.0  # .env → Settings class

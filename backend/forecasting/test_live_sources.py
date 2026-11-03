@@ -48,6 +48,8 @@ def test_current_weather_with_archived_carbon_is_labelled(monkeypatch):
     assert result["sources"]["carbon"] == "archived_constant"
     assert result["sources"]["fallback"] is True
     assert len(result["forecast"]["timestamps"]) == 6
+    assert result["forecast"]["uncertainty"]["calibrated"] is False
+    assert "quantiles" not in result["forecast"]
 
 
 def test_weather_failure_falls_back_to_dated_archive(monkeypatch):

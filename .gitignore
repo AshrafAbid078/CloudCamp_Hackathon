@@ -1,5 +1,8 @@
 # Environments
 .env
+.env.*
+!.env.example
+!.env.*.example
 .venv
 env/
 venv/
@@ -86,3 +89,4 @@ coverage.xml
 .local-jwt-secret
 .initial-admin-credential
 *.tsbuildinfo
+/.mcp.json

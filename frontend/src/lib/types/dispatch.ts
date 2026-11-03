@@ -72,6 +72,7 @@ export interface DispatchSummaryKpis {
 }
 
 export interface ManualOverrideSubmission {
+  customAssets?: CustomAssetInput[];
   actionId: string;
   assetId: string;
   assetName: string;
@@ -81,6 +82,14 @@ export interface ManualOverrideSubmission {
   overrideType: 'approve' | 'shift' | 'reject';
   rejectionReason?: string;
   operatorNotes?: string;
+}
+
+export interface CustomAssetInput {
+  name: string;
+  power_kw: number;
+  duration_hours: number;
+  deadline_hour: number;
+  earliest_start_hour?: number;
 }
 
 export interface OptimizationRunHistory {

@@ -34,11 +34,6 @@ export const dispatchApi = {
     let planData: BackendDispatchPlanResponse;
     try {
       planData = await apiClient<BackendDispatchPlanResponse>(`/dispatch/runs/latest?hours=${horizonHours}`);
-      const firstSlot = planData.forecast_used?.timestamps?.[0];
-      const ageHours = firstSlot ? Math.abs(Date.now() - new Date(firstSlot).getTime()) / 3_600_000 : Infinity;
-      if (!Number.isFinite(ageHours) || ageHours > 2) {
-        planData = await apiClient<BackendDispatchPlanResponse>(`/dispatch/plan?hours=${horizonHours}&region=bd&record=false`);
-      }
     } catch (error) {
       if (!(error instanceof ApiError) || error.status !== 404) throw error;
       planData = await apiClient<BackendDispatchPlanResponse>(`/dispatch/plan?hours=${horizonHours}&region=bd&record=false`);
@@ -62,12 +57,15 @@ export const dispatchApi = {
       actions: adapted.actions,
       runId: planData.run_id ?? null,
       forecastSources: planData.forecast_used?.sources ?? null,
+      customAssets: planData.assumptions?.custom_assets ?? [],
+      forecastStart: planData.forecast_used?.timestamps?.[0] ?? null,
     };
   },
 
-  createDispatchRun: async (horizonHours: number = 24) => {
-    const plan = await apiClient<BackendDispatchPlanResponse>(`/dispatch/runs?hours=${horizonHours}`, { method: 'POST' });
-    return adaptBackendDispatchPlan(plan);
+  createDispatchRun: async (horizonHours: number = 24, customAssets: import('../types/dispatch').CustomAssetInput[] = []) => {
+    return apiClient<BackendDispatchPlanResponse>(`/dispatch/runs?hours=${horizonHours}`, {
+      method: 'POST', body: JSON.stringify({ custom_assets: customAssets }),
+    });
   },
 
   decideRun: async (runId: string, action: 'approve' | 'reject', reason?: string) => {
@@ -95,7 +93,7 @@ export const dispatchApi = {
     if (start < 0 || start > 23 || end <= start || end > 24) throw new Error('Enter a valid window within this day.');
     const plan = await apiClient<BackendDispatchPlanResponse>('/dispatch/override', {
       method: 'POST',
-      body: JSON.stringify({ asset_id: payload.assetId, forced_start_hour: start, forced_duration: end - start, horizon_hours: payload.horizonHours, region: 'bd', reason: payload.rejectionReason }),
+      body: JSON.stringify({ asset_id: payload.assetId, forced_start_hour: start, forced_duration: end - start, horizon_hours: payload.horizonHours, region: 'bd', reason: payload.rejectionReason, custom_assets: payload.customAssets ?? [] }),
     });
     const applied = plan.plan?.industrial?.find(asset => asset.asset_id === payload.assetId);
     if (plan.status !== 'success' || !plan.run_id || !applied || !applied.optimized_hours.includes(start)) {
@@ -115,8 +113,10 @@ export const dispatchApi = {
     duration_hours: number;
     deadline_hour: number;
     earliest_start_hour?: number;
+    horizon_hours: number;
+    existing_assets: import('../types/dispatch').CustomAssetInput[];
   }) => {
-    return apiClient<{
+    return apiClient<BackendDispatchPlanResponse & {
       status: string;
       custom_asset: {
         name: string;
@@ -137,6 +137,7 @@ export const dispatchApi = {
 };
 
 interface BackendCopilotResponse {
+  mode: 'gemini' | 'local_tools';
   status: string;
   role: string;
   reply: string;
@@ -148,22 +149,25 @@ interface BackendCopilotResponse {
 }
 
 export const copilotApi = {
-  sendQuery: async (prompt: string, role?: string): Promise<CopilotMessage> => {
+  sendQuery: async (prompt: string, role?: string, history: CopilotMessage[] = []): Promise<CopilotMessage> => {
+    const conversation_history = history.filter(turn => turn.sender === 'user' || (turn.sender === 'assistant' && !turn.id.startsWith('msg-init')))
+      .slice(-6).map(turn => ({ role: turn.sender === 'user' ? 'user' : 'model', text: turn.content.slice(0, 2000) }));
     const res = await apiClient<BackendCopilotResponse>('/copilot/chat', {
       method: 'POST',
-      body: JSON.stringify({ message: prompt, role }),
+      body: JSON.stringify({ message: prompt, role, conversation_history }),
     });
     return {
       id: `copilot-${Date.now()}`,
       sender: 'assistant',
       content: res.reply,
+      inferenceMode: res.mode,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       rolePerspective: (res.role as 'facility_manager' | 'grid_operator') || 'facility_manager',
       toolCalls: (res.tool_calls || []).map((tc) => ({
         toolName: (tc.tool === 'get_solar_forecast' ? 'get_forecast' : tc.tool === 'get_dispatch_schedule' ? 'get_dispatch_plan' : tc.tool === 'simulate_whatif' ? 'run_whatif' : 'explain_decision'),
         args: tc.args || {},
         outputSummary: typeof tc.result === 'object' ? JSON.stringify(tc.result) : String(tc.result || ''),
-        durationMs: 120,
+        durationMs: 0,
       })),
     };
   },

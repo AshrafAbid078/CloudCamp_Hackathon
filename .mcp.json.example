@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "meridian-grid": {
+      "command": "python",
+      "args": ["backend/run_mcp.py"]
+    }
+  }
+}

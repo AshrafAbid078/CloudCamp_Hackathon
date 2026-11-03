@@ -9,7 +9,6 @@ type ScenarioResult = Awaited<ReturnType<typeof dispatchApi.compareScenario>>;
 
 const SAMPLE_PROMPTS = [
   { label: '☀️ Today\'s Solar Forecast', text: 'What is today\'s solar generation forecast and grid carbon intensity?' },
-  { label: '🇧🇩 আজকের পূর্বাভাস ও কার্বন', text: 'আজকের সোলার ফোরকাস্ট এবং গ্রিড কার্বন পরিস্থিতি কেমন?' },
   { label: '⚡ Simulate 200 kW Solar', text: 'What happens if we install 200 kW rooftop solar capacity?' },
   { label: '🔋 Battery Arbitrage Rationale', text: 'Explain the decision logic for the battery charge and discharge windows.' },
   { label: '🏭 24h Peak Shaving Status', text: 'What are today\'s baseline vs optimized costs and peak load reduction?' },
@@ -72,7 +71,7 @@ export default function CopilotStudioPage() {
           <p className="page-kicker">Intelligence / Phase 5</p>
           <h1 className="page-title">AI Copilot & MCP Studio</h1>
           <p className="page-subtitle">
-            Grounded reasoning engine powered by Google Gemini & Model Context Protocol (MCP) tools
+            Source-labelled demo tools with optional Gemini reasoning and a separate local MCP server
           </p>
         </div>
 
@@ -138,6 +137,7 @@ export default function CopilotStudioPage() {
                       </span>
                       <span>•</span>
                       <span>{msg.timestamp || 'Just now'}</span>
+                      {msg.inferenceMode && <span>{msg.inferenceMode === 'gemini' ? 'Gemini + tool evidence' : 'Local tool response'}</span>}
                     </div>
 
                     {/* Markdown / Text Content */}
@@ -147,7 +147,7 @@ export default function CopilotStudioPage() {
                     {msg.toolCalls && msg.toolCalls.length > 0 && (
                       <div className="mt-3 space-y-2 border-t border-[var(--border-subtle)] pt-2.5">
                         <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">
-                          ⚡ Model Context Protocol (MCP) Tool Execution:
+                          ⚡ Tool evidence:
                         </p>
                         {msg.toolCalls.map((tc, tcIdx) => {
                           const toolId = `${msg.id}-tc-${tcIdx}`;
@@ -187,7 +187,7 @@ export default function CopilotStudioPage() {
             {isLoading && (
               <div className="flex items-center gap-3 text-xs text-[var(--text-muted)] p-3">
                 <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--accent-clean)] border-t-transparent" />
-                <span>Copilot is querying MCP tools & computing optimal response…</span>
+                <span>Copilot is checking demo tools and sources…</span>
               </div>
             )}
             <div ref={chatEndRef} />
@@ -220,6 +220,7 @@ export default function CopilotStudioPage() {
           >
             <input
               type="text"
+              maxLength={1000}
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
               placeholder={
@@ -246,7 +247,7 @@ export default function CopilotStudioPage() {
           <section className="surface-panel p-5 border border-[var(--border-subtle)] space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
-                Active MCP Tools
+                Shared Tool Registry
               </h2>
               <span className="rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-emerald-400">
                 4 Mounted

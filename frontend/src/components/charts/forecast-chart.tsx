@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import type { SolarDataPoint } from '@/lib/types';
-import { useLanguageStore } from '@/lib/store/useLanguageStore';
+import { t } from '@/lib/ui-copy';
 
 type Props = {
   data: SolarDataPoint[];
@@ -19,7 +19,6 @@ export function ForecastChart({
   subtitle,
 }: Props) {
   const [metric, setMetric] = useState<'ghi' | 'carbon'>('ghi');
-  const t = useLanguageStore(state => state.t);
 
   const displayTitle = title || t('forecastTitle');
   const displaySubtitle = subtitle || t('forecastSubtitle');
@@ -43,7 +42,7 @@ export function ForecastChart({
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]')
             }
           >
-            Solar GHI (P10/P50/P90)
+            Solar GHI (display ranges)
           </button>
           <button
             type="button"

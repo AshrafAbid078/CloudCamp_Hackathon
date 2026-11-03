@@ -21,3 +21,14 @@ def test_pv_offsets_only_available_hourly_generation():
     process = IndustrialProcessAdapter("a", "A", 10, 0, 1, 1)
     result = solve_joint_schedule([process], [], [1], [0], pv_generation_kw=[6])
     assert result["grid_import_kw"] == [4]
+
+
+def test_time_limited_feasible_solution_is_not_reported_as_optimal(monkeypatch):
+    import pulp
+
+    def unfinished(problem, *args, **kwargs):
+        problem.status = pulp.LpStatusOptimal
+        problem.sol_status = pulp.LpSolutionIntegerFeasible
+    monkeypatch.setattr(pulp.LpProblem, "solve", unfinished)
+    with pytest.raises(ValueError, match="certified optimal"):
+        solve_joint_schedule([], [], [0.1], [500])

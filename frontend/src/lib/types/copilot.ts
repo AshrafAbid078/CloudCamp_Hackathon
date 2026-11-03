@@ -17,6 +17,7 @@ export interface CopilotCitation {
 }
 
 export interface CopilotMessage {
+  inferenceMode?: 'gemini' | 'local_tools';
   id: string;
   sender: MessageSender;
   content: string;

@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     copilot_model: str = "gemini-2.5-flash"
     """Default generative model used for copilot reasoning and tool execution."""
 
+    copilot_daily_model_calls: int = Field(default=100, ge=0, le=10_000)
+    """Maximum Gemini HTTP requests per UTC day and API process. Guests use local tools only."""
+
     # ------------------------------------------------------------------ #
     # CORS                                                                 #
     # ------------------------------------------------------------------ #

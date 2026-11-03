@@ -4,14 +4,12 @@ import { useRouter } from 'next/navigation';
 import { LogOut, Menu } from 'lucide-react';
 import { useRoleStore } from '@/lib/store/useRoleStore';
 import { useAuthStore } from '@/lib/store/useAuthStore';
-import { useLanguageStore } from '@/lib/store/useLanguageStore';
-import { LanguageToggle } from '@/components/common/language-toggle';
+import { t } from '@/lib/ui-copy';
 
 export function Header() {
   const router = useRouter();
   const toggleSidebar = useRoleStore(state => state.toggleSidebar);
   const logout = useAuthStore(state => state.logout);
-  const t = useLanguageStore(state => state.t);
 
   return (
     <header className="flex min-h-13 items-center justify-between gap-3 px-5 pt-4 lg:px-10 lg:pt-5">
@@ -30,7 +28,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        <LanguageToggle />
         <button
           type="button"
           onClick={() => {

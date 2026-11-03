@@ -149,12 +149,10 @@ def _archive_forecast(region: str, horizon_hours: int = 24) -> Dict[str, Any]:
         solar_pred = _forecaster.predict(current_features)
     solar_pred = solar_pred.iloc[:horizon_hours]
 
-    # Quantile solar uncertainty: P10 (overcast lower), P50 (expected), P90 (clearsky upper)
-    p50_list = [round(max(0.0, float(v)), 1) for v in solar_pred]
-    p10_list = [round(max(0.0, float(v) * 0.75), 1) for v in p50_list]
-    p90_list = [round(float(v) * 1.18, 1) for v in p50_list]
-    solar_lower = p10_list
-    solar_upper = p90_list
+    # Fixed display scenarios, without a probability calibration claim.
+    expected = [round(max(0.0, float(v)), 1) for v in solar_pred]
+    solar_lower = [round(v * 0.75, 1) for v in expected]
+    solar_upper = [round(v * 1.18, 1) for v in expected]
 
     # 4. Grid-stress Forecast (Extrapolation of Carbon Intensity)
     # Simple short-horizon extrapolation of last known value (persistence).
@@ -173,10 +171,10 @@ def _archive_forecast(region: str, horizon_hours: int = 24) -> Dict[str, Any]:
         "sources": {"solar": "archived_2020", "carbon": "archived", "location": "Bangladesh regional demo", "fallback": False},
         "forecast": {
             "timestamps": [t.isoformat() for t in future_timestamps],
-            "solar_ghi_w_m2": p50_list,
+            "solar_ghi_w_m2": expected,
             "solar_ghi_lower": solar_lower,
             "solar_ghi_upper": solar_upper,
-            "quantiles": {"p10": p10_list, "p50": p50_list, "p90": p90_list},
+            "uncertainty": {"method": "fixed_multipliers", "lower_multiplier": 0.75, "upper_multiplier": 1.18, "calibrated": False},
             "grid_stress_gco2_kwh": carbon_pred.tolist()
         }
     }
@@ -254,11 +252,8 @@ def get_forecast(region: str, horizon_hours: int = 24, source: Literal["auto", "
             "solar_ghi_w_m2": [round(max(0.0, float(v)), 1) for v in solar],
             "solar_ghi_lower": [round(max(0.0, float(v) * 0.75), 1) for v in solar],
             "solar_ghi_upper": [round(float(v) * 1.18, 1) for v in solar],
-            "quantiles": {
-                "p10": [round(max(0.0, float(v) * 0.75), 1) for v in solar],
-                "p50": [round(max(0.0, float(v)), 1) for v in solar],
-                "p90": [round(float(v) * 1.18, 1) for v in solar],
-            },
+            "uncertainty": {"method": "fixed_multipliers", "lower_multiplier": 0.75,
+                            "upper_multiplier": 1.18, "calibrated": False},
             "grid_stress_gco2_kwh": carbon_values,
         },
     }

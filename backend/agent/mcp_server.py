@@ -9,8 +9,9 @@ Run standalone via:
     python -m agent.mcp_server
 """
 
-import sys
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+from .tools import Horizon
 from .tools import (
     fetch_solar_and_carbon_forecast,
     fetch_current_dispatch_plan,
@@ -20,10 +21,11 @@ from .tools import (
 
 # Initialize FastMCP Server
 mcp = FastMCP("Meridian Grid Optimizer")
+READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
 
 
-@mcp.tool()
-def get_solar_forecast(horizon_hours: int = 24) -> dict:
+@mcp.tool(annotations=READ_ONLY)
+def get_solar_forecast(horizon_hours: Horizon = 24) -> dict:
     """
     Get regional solar generation (GHI) and grid carbon intensity forecast for Bangladesh.
     Horizon must be between 1 and 24 hours.
@@ -31,8 +33,8 @@ def get_solar_forecast(horizon_hours: int = 24) -> dict:
     return fetch_solar_and_carbon_forecast(horizon_hours=horizon_hours)
 
 
-@mcp.tool()
-def get_dispatch_schedule(horizon_hours: int = 24) -> dict:
+@mcp.tool(annotations=READ_ONLY)
+def get_dispatch_schedule(horizon_hours: Horizon = 24) -> dict:
     """
     Get the optimal MILP dispatch schedule for flexible industrial processes and batteries,
     including baseline vs optimized cost ($), emissions (kg CO2), and peak shaving (kW).
@@ -40,12 +42,12 @@ def get_dispatch_schedule(horizon_hours: int = 24) -> dict:
     return fetch_current_dispatch_plan(horizon_hours=horizon_hours)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def simulate_whatif(
     pv_capacity_kw: float = 0.0,
     base_load_kw: float = 0.0,
     feeder_capacity_kw: float | None = None,
-    horizon_hours: int = 24,
+    horizon_hours: Horizon = 24,
 ) -> dict:
     """
     Simulate a what-if operational scenario by re-running the joint MILP solver under
@@ -59,7 +61,7 @@ def simulate_whatif(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def explain_decision(asset_name: str) -> dict:
     """
     Explain why a specific industrial process or battery was scheduled at its time window,

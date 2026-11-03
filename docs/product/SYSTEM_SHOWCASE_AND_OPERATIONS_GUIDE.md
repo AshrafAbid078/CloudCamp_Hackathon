@@ -1,93 +1,27 @@
-# Meridian Grid — System Showcase & Operations Guide
+# System showcase and operations
 
-**Purpose:** Comprehensive guide explaining **what** Meridian Grid does, **how** it operates, **where** it is applied, and **who** it serves. Designed for hackathon judges, technical reviewers, and new developers.
+Meridian Grid helps a manager compare flexible process and battery schedules against a baseline. The prototype targets Bangladesh, using regional data around Dhaka and synthetic facility equipment. No customer pilots or measured savings are claimed.
 
----
+## Public documentation
 
-## 1. Quick Orientation: What, How, Where & Who
+Frontend `/docs` loads only the backend's authorized published payload. Admin controls at `/docs-admin` support drafts, publish/version history, ON/OFF, dates and duration. The default availability window is June 10–14, 2027, Asia/Dhaka. Team profiles stay empty until an admin supplies verified details.
 
-| Dimension | Definition & System Implementation |
-| :--- | :--- |
-| **What happens? (কি কি হয়)** | **Dual-Layer Energy Intelligence:** Dynamically forecasts solar generation and grid carbon intensity, then uses mathematical optimization (MILP) to orchestrate flexible industrial machines and batteries into the cleanest, lowest-cost hours. Natural-language AI Copilot explains decisions with zero hallucination. |
-| **How does it work? (কীভাবে হয়)** | **Ingest $\rightarrow$ Forecast $\rightarrow$ Optimize $\rightarrow$ Explain:**<br>1. Ingests weather (Open-Meteo), satellite benchmarks (NREL NSRDB), and live carbon telemetry (Electricity Maps v4).<br>2. Forecasts 6–24h ahead rolling solar curves.<br>3. PuLP MILP solver minimizes composite `Cost + Carbon` under TOU tariffs and machine deadlines.<br>4. Google Gemini 2.5 Flash executes Model Context Protocol (MCP) tools for interactive decisions. |
-| **Where does it operate? (কই হয়)** | **Bangladesh Industrial Corridors:** Dhaka, Gazipur, Narayanganj, Savar, and Chittagong economic zones. |
-| **Who is it for? (কার জন্য)** | **Two Complementary Audiences:**<br>1. **Industrial Facility Managers:** Ready-Made Garments (RMG), textile spinning/dyeing, cold-storage, and pharmaceutical factories with rooftop solar.<br>2. **Utility Grid Operators:** BREB, BPDB, DESCO, DPDC seeking coincident peak shaving and feeder stability. |
+An OFF or out-of-window response shows Not Available. Backend failure shows temporary unavailability without publishing static content. An already open page rechecks access every ten seconds. This cannot retract copies already downloaded while publication was authorized.
 
----
+## Planning and provenance
 
-## 2. The Real-World Economic Context (Bangladesh)
+Check the solar/carbon source badges before interpreting results. Archived 2020 forecasts retain their historical dates. GHI is irradiance, not measured site generation. Display ranges are fixed heuristic scenarios.
 
-Industrial electricity tariffs in Bangladesh incorporate a steep **Time-of-Use (TOU)** pricing structure:
-- **Peak Window (17:00 – 23:00 / 5 PM – 11 PM):** $\approx \$0.20 / \text{kWh}$ (up to $4\times$ standard rate) + severe peak demand capacity surcharges.
-- **Off-Peak / Daytime Window (23:00 – 17:00):** $\approx \$0.05 / \text{kWh}$ to $\$0.08 / \text{kWh}$.
+Custom machines re-solve the entire portfolio. Save before changing horizons. Saved custom definitions survive reload and manual overrides. Review signed cost/carbon/peak comparisons; increases are possible. Decisions are stored records and do not send equipment commands.
 
-### The Factory Manager's Pain Today:
-Most factories run machinery (weaving looms, drying chambers, spinning frames, chillers) on static shift schedules by habit. Running these during evening peak hours causes massive electricity bill spikes, while midday rooftop solar generation is often underutilized or curtailed.
+Tariff values in `data/synthetic/tariff_placeholder.json` are synthetic examples, not verified Bangladesh utility prices. Planning results must not be advertised as actual facility ROI.
 
-### The Meridian Grid Solution:
-1. **Solar Synchronization:** Sinks flexible batches into peak solar hours ($10:00 - 14:00$).
-2. **Battery Arbitrage:** Charges Battery Energy Storage Systems (BESS) during cheap off-peak night hours or excess solar; discharges during high-tariff peak hours ($17:00 - 22:00$).
-3. **Feeder Protection:** Constrains facility demand to stay strictly within substation feeder limits, eliminating demand-charge penalties.
+## Copilot
 
----
+Guest mode uses read-only local demo tools. Authenticated sessions may use Gemini when configured and within the per-process daily budget. Responses identify local-tool versus Gemini mode and expose tool evidence. A separate local stdio MCP server uses the same tools; the HTTP tool catalog is not a transport.
 
-## 3. Architecture & Data Flow
+## Deployment checks
 
-```
- ┌──────────────────────┐  ┌───────────────────────┐  ┌──────────────────────┐
- │   Open-Meteo Live    │  │  NREL NSRDB / GFS     │  │ Electricity Maps v4  │
- │  (Regional Weather)  │  │ (Satellite Ground-T)  │  │(Live Carbon gCO2/kWh)│
- └──────────┬───────────┘  └───────────┬───────────┘  └──────────┬───────────┘
-            │                          │                         │
-            └──────────────────────────┼─────────────────────────┘
-                                       ▼
-                       ┌───────────────────────────────┐
-                       │   FastAPI Ingestion Engine    │
-                       └───────────────┬───────────────┘
-                                       │
-                      ┌────────────────┴────────────────┐
-                      ▼                                 ▼
-         ┌─────────────────────────┐       ┌─────────────────────────┐
-         │ Solar Forecasting Serv. │       │ PuLP MILP Solver Engine │
-         │ (6h, 12h, 24h Horizons) │       │ (Cost + Carbon Minimize)│
-         └────────────┬────────────┘       └────────────┬────────────┘
-                      │                                 │
-                      └────────────────┬────────────────┘
-                                       │
-                        ┌──────────────┴──────────────┐
-                        ▼                             ▼
-        ┌──────────────────────────────┐   ┌─────────────────────────────┐
-        │  Next.js 16 Web Dashboard    │   │ AI Copilot & MCP Tools Layer│
-        │  (Gantt, Curves, Overrides)  │   │ (Grounded Gemini Reasoning) │
-        └──────────────────────────────┘   └─────────────────────────────┘
-```
+Use Vercel for the frontend, Render for FastAPI and Turso for hosted persistence. See [README](../../README.md) for exact variables and commands. Keep API keys only on the backend. Render Free cold starts and sleeping affect latency and in-process polling.
 
----
-
-## 4. Public Pages vs. Protected Pages (Navigation Model)
-
-### A. Publicly Accessible Without Login (Guest Evaluation):
-Anyone, including hackathon judges and mobile users, can access these without credentials:
-1. **` / ` (Landing Page):** High-level overview, workflow timeline, and sample illustrative preview.
-2. **` /about ` (System Showcase):** Complete explanation of what happens, how it works, target geography, economics, and interactive feature breakdown.
-3. **` /docs ` (Technical Documentation Showcase):** Comprehensive architecture diagrams, live registered API endpoints, data provenance records, and feature status matrix.
-4. **` /login ` & ` /signup `:** User authentication and facility manager provisioning.
-
-### B. Authenticated Operations Workspace:
-Once logged in, users access the live operational suite:
-- **`/dashboard`:** Real-time KPI summaries, today's solar outlook, and live feeder utilization.
-- **`/forecast`:** Detailed GHI and temperature curves with confidence bounds.
-- **`/dispatch`:** Full 24-hour Gantt chart, machine scheduling windows, and manual shift overrides.
-- **`/copilot`:** Real-time AI Copilot Studio executing Model Context Protocol (MCP) tools.
-- **`/history`:** Historical run records and review decisions.
-- **`/data`:** Ingested Electricity Maps carbon readings and database snapshots.
-
----
-
-## 5. Demonstration Scope & Transparency Disclosures
-
-To maintain strict scientific and documentation integrity:
-- **Model Inputs:** Uses live regional Open-Meteo forecasts and Electricity Maps v4 when online; gracefully falls back to verified cached baselines if upstream APIs are unreachable.
-- **Asset Data:** Industrial machines (weaving looms, drying chambers) and batteries are modeled on realistic industrial specifications.
-- **Control Scope:** This is a software planning and optimization engine. No physical electrical relays or hardware breakers are actuated.
-
+After deployment, test login/password change, a custom plan save, restart/read-back, a source-labelled Copilot answer and docs OFF/ON/revocation. Verify provider permissions without exposing keys. Automated local regressions do not replace hosted account or load validation.

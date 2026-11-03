@@ -3,15 +3,16 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { OverridePanel } from '@/components/features';
 import { dispatchApi } from '@/lib/api';
+import { adaptBackendDispatchPlan, type BackendDispatchPlanResponse } from '@/lib/api/adapters';
+import type { CustomAssetInput } from '@/lib/types/dispatch';
 import { useRoleStore } from '@/lib/store/useRoleStore';
-import { useLanguageStore } from '@/lib/store/useLanguageStore';
-import { PlusCircle, X, CheckCircle2, Zap } from 'lucide-react';
+import { t } from '@/lib/ui-copy';
+import { PlusCircle, X, Zap } from 'lucide-react';
 import type { IndustrialAssetTrack, BatteryAssetTrack, DispatchSummaryKpis, ForecastHorizon } from '@/lib/types';
 
 export default function DispatchPlanPage() {
   const { forecastHorizon, setForecastHorizon } = useRoleStore();
   const hours = Number.parseInt(forecastHorizon, 10);
-  const t = useLanguageStore(state => state.t);
 
   const [assets, setAssets] = useState<IndustrialAssetTrack[]>([]);
   const [battery, setBattery] = useState<BatteryAssetTrack | null>(null);
@@ -19,6 +20,7 @@ export default function DispatchPlanPage() {
   const [runId, setRunId] = useState<number | null>(null);
   const [solarSource, setSolarSource] = useState('');
   const [carbonSource, setCarbonSource] = useState('');
+  const [forecastStart, setForecastStart] = useState<string | null>(null);
   const [tab, setTab] = useState<'industrial' | 'battery'>('industrial');
   const [override, setOverride] = useState<IndustrialAssetTrack | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +34,19 @@ export default function DispatchPlanPage() {
   const [customDuration, setCustomDuration] = useState('4');
   const [customDeadline, setCustomDeadline] = useState('18');
   const [customBusy, setCustomBusy] = useState(false);
+  const [customAssets, setCustomAssets] = useState<CustomAssetInput[]>([]);
+
+  function applyPlan(plan: BackendDispatchPlanResponse) {
+    const adapted = adaptBackendDispatchPlan(plan);
+    setAssets(adapted.industrial);
+    setBattery(adapted.batteries[0] ?? null);
+    setKpis(adapted.kpis);
+    setRunId(plan.run_id ?? null);
+    setCustomAssets(plan.assumptions?.custom_assets ?? []);
+    setSolarSource(plan.forecast_used?.sources?.solar ?? 'unknown');
+    setCarbonSource(plan.forecast_used?.sources?.carbon ?? 'unknown');
+    setForecastStart(plan.forecast_used?.timestamps?.[0] ?? null);
+  }
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -42,8 +57,10 @@ export default function DispatchPlanPage() {
       setBattery(plan.batteryTrack);
       setKpis(plan.summaryKpis);
       setRunId(plan.runId);
+      setCustomAssets(plan.customAssets);
       setSolarSource(plan.forecastSources?.solar ?? 'unknown');
       setCarbonSource(plan.forecastSources?.carbon ?? 'unknown');
+      setForecastStart(plan.forecastStart);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Plan unavailable.');
     } finally {
@@ -59,11 +76,12 @@ export default function DispatchPlanPage() {
     setLoading(true);
     setError('');
     try {
-      await dispatchApi.createDispatchRun(hours);
-      await refresh();
+      const saved = await dispatchApi.createDispatchRun(hours, customAssets);
+      applyPlan(saved);
       setNotice('A new demo plan was saved. No equipment command was sent.');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save the plan.');
+    } finally {
       setLoading(false);
     }
   }
@@ -78,31 +96,13 @@ export default function DispatchPlanPage() {
         power_kw: Number(customPower),
         duration_hours: Number(customDuration),
         deadline_hour: Number(customDeadline),
+        horizon_hours: hours,
+        existing_assets: customAssets,
       });
 
       const ca = res.custom_asset;
-      const formattedSlot = `${String(ca.optimal_start_hour ?? 0).padStart(2, '0')}:00 – ${String(
-        (ca.optimal_start_hour ?? 0) + ca.duration_hours
-      ).padStart(2, '0')}:00`;
-
-      // Prepend the new custom machine to local asset tracks
-      const newTrack: IndustrialAssetTrack = {
-        id: `custom-${Date.now()}`,
-        name: ca.name,
-        facility: 'Custom Industrial Unit',
-        powerKw: ca.power_kw,
-        earliestStart: '00:00',
-        deadline: `${String(ca.deadline_hour).padStart(2, '0')}:00`,
-        durationHours: ca.duration_hours,
-        chosenRunWindow: formattedSlot,
-        status: 'optimal',
-        costSavedUsd: ca.cost_saved_usd,
-        carbonAvoidedKg: Math.round(ca.power_kw * ca.duration_hours * 0.15),
-        peakKwShaved: ca.power_kw,
-        baselineRunWindow: '00:00 - Immediate',
-      };
-
-      setAssets(prev => [newTrack, ...prev]);
+      const formattedSlot = `${ca.optimal_start_hour ?? 0}:00 - ${(ca.optimal_start_hour ?? 0) + ca.duration_hours}:00`;
+      applyPlan(res);
       setIsCustomModalOpen(false);
       setNotice(`Custom machine "${ca.name}" successfully scheduled at optimal window ${formattedSlot}!`);
     } catch (cause) {
@@ -124,7 +124,8 @@ export default function DispatchPlanPage() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setIsCustomModalOpen(true)}
+            disabled={loading || customBusy || customAssets.length >= 10}
+            onClick={() => { setCustomDeadline(String(hours)); setIsCustomModalOpen(true); }}
             className="inline-flex items-center gap-1.5 rounded-md border border-[var(--accent-clean)] bg-[var(--surface-card)] px-3.5 py-2 text-sm font-semibold text-[var(--accent-clean)] transition-colors hover:bg-[var(--accent-clean)] hover:text-white"
           >
             <PlusCircle className="h-4 w-4" />
@@ -135,6 +136,8 @@ export default function DispatchPlanPage() {
             {(['6h', '12h', '24h'] as ForecastHorizon[]).map(h => (
               <button
                 key={h}
+                disabled={loading || customBusy || (customAssets.length > 0 && runId === null)}
+                title={customAssets.length > 0 && runId === null ? 'Save the custom plan before changing horizon' : undefined}
                 onClick={() => setForecastHorizon(h)}
                 aria-pressed={forecastHorizon === h}
                 className={
@@ -165,7 +168,7 @@ export default function DispatchPlanPage() {
       {!loading && (
         <div className="flex flex-wrap gap-2 text-xs">
           <span className="demo-tag">
-            Solar: {solarSource === 'open_meteo_weather_forecast' ? 'current Open-Meteo forecast (P10–P90)' : 'archived fallback'}
+            Solar: {solarSource === 'open_meteo_weather_forecast' ? 'Open-Meteo forecast snapshot (heuristic ranges)' : 'archived fallback'}
           </span>
           <span className="demo-tag">
             Carbon: {carbonSource === 'electricity_maps_v4_forecast' ? 'Electricity Maps forecast' : carbonSource === 'electricity_maps_recent_reading_persistence' ? 'recent reading held constant' : 'archived constant'}
@@ -199,6 +202,7 @@ export default function DispatchPlanPage() {
             <h2 className="text-lg font-bold">{t('dispatchGantt')}</h2>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               {runId ? 'Saved run ' + runId : 'Live preview'} · TOU tariff optimized
+              {forecastStart && <span className="mt-1 block text-xs">Forecast horizon begins {new Date(forecastStart).toLocaleString('en-GB', { timeZone: 'Asia/Dhaka' })} (Asia/Dhaka). Saving a new plan recomputes with the available data.</span>}
             </p>
           </div>
           <Link href="/history" className="teal-link text-sm">
@@ -384,6 +388,7 @@ export default function DispatchPlanPage() {
 
       {override && (
         <OverridePanel
+          customAssets={customAssets}
           isOpen={true}
           onClose={() => setOverride(null)}
           initialAssetId={override.id}

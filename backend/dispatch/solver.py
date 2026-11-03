@@ -3,13 +3,13 @@ import pulp
 def _get_solver():
     try:
         import highspy
-        return pulp.HiGHS(msg=False)
+        return pulp.HiGHS(msg=False, timeLimit=15)
     except Exception:
         pass
     try:
-        return pulp.PULP_CBC_CMD(msg=False)
+        return pulp.PULP_CBC_CMD(msg=False, timeLimit=15)
     except Exception:
-        return pulp.getSolver('PULP_CBC_CMD', msg=False)
+        return pulp.getSolver('PULP_CBC_CMD', msg=False, timeLimit=15)
 
 
 
@@ -68,7 +68,7 @@ def solve_process_schedule(
 
     problem.solve(_get_solver())
 
-    if pulp.LpStatus[problem.status] != "Optimal":
+    if problem.status != pulp.LpStatusOptimal or problem.sol_status != pulp.LpSolutionOptimal:
         raise RuntimeError(
             "No optimal schedule was found."
         )
@@ -292,7 +292,7 @@ def solve_battery_schedule(
 
     problem.solve(_get_solver())
 
-    if pulp.LpStatus[problem.status] != "Optimal":
+    if problem.status != pulp.LpStatusOptimal or problem.sol_status != pulp.LpSolutionOptimal:
         raise RuntimeError(
             "No optimal battery schedule was found."
         )

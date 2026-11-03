@@ -1,85 +1,70 @@
-"""
-backend/agent/router.py
-=======================
-FastAPI endpoints for the Meridian Grid AI Copilot & MCP Tools.
-"""
+"""Bounded Copilot HTTP interface; the MCP transport runs separately over stdio."""
+import logging
+from typing import Literal
 
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from auth.utils import get_current_user
 from db.database import get_db
-from db.models import User
+from db.models import User, UserRole
 from .copilot_service import TOOL_DECLARATIONS, chat_with_copilot
+from .limits import limit_chat, slots
 
 router = APIRouter(prefix="/copilot", tags=["AI Copilot"])
+logger = logging.getLogger(__name__)
 
 
-async def get_optional_current_user(
-    authorization: Optional[str] = Header(default=None),
-    db: Session = Depends(get_db),
-) -> Optional[User]:
-    """Resolves authenticated user if Bearer token is provided, or returns None."""
-    if not authorization or not authorization.startswith("Bearer "):
+def get_optional_current_user(authorization: str | None = Header(default=None),
+                              db: Session = Depends(get_db)) -> User | None:
+    if authorization is None:
         return None
-    token = authorization.split(" ", 1)[1]
-    try:
-        from auth.utils import decode_token
-        payload = decode_token(token)
-        username = payload.get("sub")
-        if not username:
-            return None
-        return db.query(User).filter(User.username == username, User.is_active == True).first()
-    except Exception:
-        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(401, "A valid Bearer token is required.")
+    user = get_current_user(token=token, db=db)
+    if user.must_change_password:
+        raise HTTPException(403, "Change your password before using this feature.")
+    return user
+
+
+class ChatTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["user", "model"]
+    text: str = Field(min_length=1, max_length=2000)
 
 
 class CopilotChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=1000, description="User prompt or question")
-    role: Optional[str] = Field(default="facility_manager", description="Active role perspective")
-    conversation_history: Optional[List[Dict[str, Any]]] = Field(
-        default=None, description="Previous messages in the conversation"
-    )
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    message: str = Field(min_length=1, max_length=1000)
+    role: Literal["facility_manager", "grid_operator", "admin"] | None = None
+    conversation_history: list[ChatTurn] = Field(default_factory=list, max_length=6)
 
 
-class CopilotChatResponse(BaseModel):
-    status: str
-    role: str
-    reply: str
-    tool_calls: List[Dict[str, Any]] = Field(default_factory=list)
-
-
-@router.post("/chat", response_model=CopilotChatResponse, summary="Query the grounded AI Copilot")
-async def copilot_chat_endpoint(
-    body: CopilotChatRequest,
-    current_user: Optional[User] = Depends(get_optional_current_user),
-):
-    """
-    Interacts with the Meridian Grid Copilot.
-    Supports both anonymous demo mode and authenticated role-specific sessions.
-    Uses Google Gemini with Model Context Protocol (MCP) tool execution.
-    """
-    effective_role = body.role or "facility_manager"
-    if current_user and hasattr(current_user, "role") and not body.role:
-        effective_role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-
+@router.post("/chat", summary="Query the Copilot with source-labelled demo tools")
+async def copilot_chat_endpoint(body: CopilotChatRequest, request: Request,
+                               current_user: User | None = Depends(get_optional_current_user)):
+    identity = f"user:{current_user.id}" if current_user else f"ip:{request.client.host if request.client else 'unknown'}"
+    limit_chat(identity, current_user is not None)
+    if body.role == "admin" and (not current_user or current_user.role != UserRole.admin):
+        raise HTTPException(403, "Admin perspective requires an administrator account.")
+    role = body.role or (current_user.role.value if current_user else "facility_manager")
+    if not slots.acquire(blocking=False):
+        raise HTTPException(429, "Copilot is busy. Try again shortly.", headers={"Retry-After": "5"})
     try:
-        response = await chat_with_copilot(
-            message=body.message,
-            role=effective_role,
-            conversation_history=body.conversation_history,
-        )
-        return response
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Copilot inference error: {str(exc)}")
+        return await chat_with_copilot(body.message, role,
+                                       [turn.model_dump() for turn in body.conversation_history],
+                                       allow_llm=current_user is not None)
+    except Exception:
+        logger.error("Copilot request failed; no request content or credentials logged.")
+        raise HTTPException(503, "Copilot is temporarily unavailable. Please retry.")
+    finally:
+        slots.release()
 
 
-@router.get("/tools", summary="List exposed Model Context Protocol (MCP) tools")
+@router.get("/tools", summary="List shared function tools; this endpoint is not an MCP transport")
 def list_mcp_tools():
-    """Returns the JSON schema of available MCP tools for LLM tool binding."""
-    return {
-        "status": "success",
-        "protocol": "Model Context Protocol (MCP) 1.0",
-        "tools": TOOL_DECLARATIONS,
-    }
+    return {"status": "success", "protocol": "HTTP tool catalog",
+            "mcp_transport": "stdio (python -m agent.mcp_server from backend/)",
+            "scope": "Read-only synthetic portfolio previews", "tools": TOOL_DECLARATIONS}

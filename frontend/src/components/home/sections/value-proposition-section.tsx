@@ -72,8 +72,8 @@ export function ValuePropositionSection() {
           </div>
 
           <div className="pt-4 border-t border-[var(--border-hairline)] flex items-center justify-between text-xs font-mono">
-            <span className="text-[var(--text-muted)]">Typical Energy Savings:</span>
-            <span className="text-lg font-bold text-[var(--accent-clean)]">28% – 38% / Month</span>
+            <span className="text-[var(--text-muted)]">Evaluation basis:</span>
+            <span className="text-lg font-bold text-[var(--accent-clean)]">Modeled per plan</span>
           </div>
         </motion.div>
 

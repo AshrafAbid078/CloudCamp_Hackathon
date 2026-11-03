@@ -17,7 +17,8 @@ export function useCopilot() {
   const sendMessage = async (userPrompt: string) => {
     if (!userPrompt.trim() || isCopilotLoading) return;
 
-    // 1. Add user message
+    const history = useAppStore.getState().copilotMessages;
+    // Add the current prompt separately from the prior context.
     addCopilotMessage({
       sender: 'user',
       content: userPrompt.trim(),
@@ -28,7 +29,7 @@ export function useCopilot() {
     try {
       const activeRole = useRoleStore.getState().role;
       // 2. Fetch intelligent grounded response from Gemini + MCP tools
-      const assistantMessage = await copilotApi.sendQuery(userPrompt, activeRole);
+      const assistantMessage = await copilotApi.sendQuery(userPrompt, activeRole, history);
       addCopilotMessage({
         sender: 'assistant',
         content: assistantMessage.content,
@@ -36,11 +37,12 @@ export function useCopilot() {
         suggestedActions: assistantMessage.suggestedActions,
         toolCalls: assistantMessage.toolCalls,
         rolePerspective: assistantMessage.rolePerspective,
+        inferenceMode: assistantMessage.inferenceMode,
       });
-    } catch {
+    } catch (error) {
       addCopilotMessage({
         sender: 'system',
-        content: 'Error: Failed to reach the Copilot inference gateway. Please check backend connection.',
+        content: error instanceof Error ? error.message : 'Copilot temporarily unavailable. Please retry.',
       });
     } finally {
       setCopilotLoading(false);

@@ -1,261 +1,121 @@
-"""
-backend/agent/tools.py
-======================
-Grounded tool implementations for the Meridian Grid AI Agent & Copilot.
-These functions interface directly with the real Phase 2 forecasting engine
-and Phase 3 PuLP MILP optimizer — preventing LLM hallucinations.
-"""
+"""Read-only demo tools shared by Gemini function calling and the stdio MCP server."""
+from typing import Annotated
 
-from typing import Any, Dict
-from db.database import SessionLocal
-from db.models import User, UserRole
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+
 from forecasting.router import get_forecast
-from dispatch.api import get_dispatch_plan, _load_tariff
+from dispatch.api import _build_dispatch_plan
+
+Horizon = Annotated[int, Field(ge=1, le=24)]
+_horizon = TypeAdapter(Horizon)
 
 
-def _get_system_user() -> User:
-    """Internal user representation for background copilot evaluations."""
-    return User(
-        id=0,
-        username="copilot-agent",
-        hashed_password="internal-dummy-hash",
-        role=UserRole.admin,
-        is_active=True,
-    )
+class ScenarioInputs(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    pv_capacity_kw: float = Field(default=0, ge=0, le=100_000)
+    base_load_kw: float = Field(default=0, ge=0, le=100_000)
+    feeder_capacity_kw: float | None = Field(default=None, gt=0, le=1_000_000)
+    horizon_hours: Horizon = 24
 
 
-def fetch_solar_and_carbon_forecast(horizon_hours: int = 24) -> Dict[str, Any]:
-    """
-    Retrieves the regional solar irradiance (GHI) and carbon intensity forecast for Bangladesh.
+def _preview(horizon_hours: int, **kwargs) -> dict:
+    return _build_dispatch_plan(hours=_horizon.validate_python(horizon_hours), region="bd",
+                               feeder_capacity_kw=kwargs.get("feeder_capacity_kw"),
+                               pv_capacity_kw=kwargs.get("pv_capacity_kw", 0.0),
+                               base_load_kw=kwargs.get("base_load_kw", 0.0))
 
-    Args:
-        horizon_hours: Forecast lookahead horizon (between 1 and 24 hours).
 
-    Returns:
-        Structured forecast metrics including average GHI, peak solar hours,
-        grid carbon intensity, and telemetry source.
-    """
-    bounded_horizon = max(1, min(24, int(horizon_hours)))
-    forecast_data = get_forecast(region="bd", horizon_hours=bounded_horizon, source="auto")
-
-    solar = forecast_data.get("solar", {})
-    carbon = forecast_data.get("carbon", {})
-    timestamps = forecast_data.get("timestamps", [])
-
-    ghi_values = solar.get("values", [])
-    max_ghi = max(ghi_values) if ghi_values else 0.0
-    avg_ghi = (sum(ghi_values) / len(ghi_values)) if ghi_values else 0.0
-    peak_hour_idx = ghi_values.index(max_ghi) if ghi_values and max_ghi > 0 else 12
-    peak_timestamp = timestamps[peak_hour_idx] if peak_hour_idx < len(timestamps) else "Midday"
-
-    carbon_values = carbon.get("values", [])
-    avg_carbon = (sum(carbon_values) / len(carbon_values)) if carbon_values else 625.0
-
+def fetch_solar_and_carbon_forecast(horizon_hours: int = 24) -> dict:
+    hours = _horizon.validate_python(horizon_hours)
+    data = get_forecast(region="bd", horizon_hours=hours, source="auto")
+    forecast, sources = data["forecast"], data["sources"]
+    solar, carbon, timestamps = (forecast["solar_ghi_w_m2"], forecast["grid_stress_gco2_kwh"],
+                                 forecast["timestamps"])
+    if not solar or len(solar) != len(carbon) or len(solar) != len(timestamps):
+        raise ValueError("Forecast arrays are unavailable or inconsistent.")
+    peak_index = max(range(len(solar)), key=solar.__getitem__)
     return {
-        "region": "Bangladesh (Dhaka Grid)",
-        "horizon_hours": bounded_horizon,
-        "solar": {
-            "source": solar.get("source", "Open-Meteo regional forecast"),
-            "peak_ghi_w_per_m2": round(max_ghi, 1),
-            "average_ghi_w_per_m2": round(avg_ghi, 1),
-            "peak_solar_time": peak_timestamp,
-            "unit": "W/m²",
-            "confidence_band": "±15%",
-        },
-        "carbon_telemetry": {
-            "source": carbon.get("source", "Electricity Maps v4"),
-            "average_intensity_gco2_kwh": round(avg_carbon, 1),
-            "unit": "gCO2eq/kWh",
-            "status": "active",
-        },
+        "region": "Bangladesh (Dhaka Grid)", "horizon_hours": hours,
+        "sources": sources, "model": data["accuracy"]["model"],
+        "solar": {"source": sources["solar"], "peak_ghi_w_per_m2": round(solar[peak_index], 1),
+                  "average_ghi_w_per_m2": round(sum(solar) / len(solar), 1),
+                  "peak_solar_time": timestamps[peak_index], "unit": "W/m²",
+                  "uncertainty": "Heuristic display range; not calibrated quantiles"},
+        "carbon_telemetry": {"source": sources["carbon"],
+                             "average_intensity_gco2_kwh": round(sum(carbon) / len(carbon), 1),
+                             "unit": "gCO2eq/kWh", "as_of": sources.get("carbon_as_of"),
+                             "status": "forecast" if sources["carbon"] == "electricity_maps_v4_forecast"
+                             else "persistence" if "recent_reading" in sources["carbon"] else "archived"},
     }
 
 
-def fetch_current_dispatch_plan(horizon_hours: int = 24) -> Dict[str, Any]:
-    """
-    Computes or retrieves the optimal MILP dispatch plan for the next horizon.
-
-    Args:
-        horizon_hours: Number of hours to schedule (1 to 24).
-
-    Returns:
-        Schedule summary including cost savings ($), emissions shaved (kg),
-        peak reduction (kW), and asset scheduling windows.
-    """
-    bounded_hours = max(1, min(24, int(horizon_hours)))
-    system_user = _get_system_user()
-    db = SessionLocal()
-    try:
-        result = get_dispatch_plan(
-            hours=bounded_hours,
-            region="bd",
-            current_user=system_user,
-            db=db,
-            record=False,
-            feeder_capacity_kw=None,
-            pv_capacity_kw=0.0,
-            base_load_kw=0.0,
-        )
-        plan = result.get("plan", {})
-        kpis = plan.get("kpis", {})
-
-        # Summarize industrial assets
-        industrial_summary = []
-        for p in plan.get("industrial", []):
-            industrial_summary.append({
-                "asset": p.get("process_name"),
-                "power_kw": p.get("power_kw"),
-                "duration_hours": p.get("duration_hours"),
-                "optimal_start_hour": p.get("optimal_start_hour"),
-                "deadline_hour": p.get("deadline_hour"),
-                "cost_saved_usd": round(p.get("cost_saved", 0.0), 2),
-            })
-
-        # Summarize batteries
-        battery_summary = []
-        for b in plan.get("batteries", []):
-            charge_slots = [
-                idx for idx, act in enumerate(b.get("actions", [])) if act == "CHARGE"
-            ]
-            discharge_slots = [
-                idx for idx, act in enumerate(b.get("actions", [])) if act == "DISCHARGE"
-            ]
-            battery_summary.append({
-                "battery": b.get("battery_name"),
-                "capacity_kwh": b.get("capacity_kwh"),
-                "charge_hours": charge_slots,
-                "discharge_hours": discharge_slots,
-                "cost_saved_usd": round(b.get("cost_saved", 0.0), 2),
-            })
-
-        return {
-            "status": "optimal",
-            "horizon_hours": bounded_hours,
-            "kpis": {
-                "baseline_cost_usd": round(kpis.get("baseline_cost", 0.0), 2),
-                "optimized_cost_usd": round(kpis.get("optimized_cost", 0.0), 2),
-                "cost_savings_usd": round(kpis.get("cost_savings_usd", 0.0), 2),
-                "carbon_saved_kg": round(kpis.get("carbon_savings_kg", 0.0), 2),
-                "peak_load_shaved_kw": round(kpis.get("peak_shaved_kw", 0.0), 2),
-            },
-            "scheduled_processes_count": len(industrial_summary),
-            "industrial_processes": industrial_summary[:5],  # Top 5 for brevity
-            "batteries": battery_summary,
-        }
-    finally:
-        db.close()
-
-
-def run_whatif_simulation(
-    pv_capacity_kw: float = 0.0,
-    base_load_kw: float = 0.0,
-    feeder_capacity_kw: float | None = None,
-    horizon_hours: int = 24,
-) -> Dict[str, Any]:
-    """
-    Executes a real-time MILP what-if scenario solving processes and batteries
-    under altered solar PV capacity or load conditions.
-
-    Args:
-        pv_capacity_kw: Simulated rooftop solar capacity in kW (e.g. 100, 250, 500).
-        base_load_kw: Continuous facility base load in kW.
-        feeder_capacity_kw: Maximum grid feeder import limit in kW.
-        horizon_hours: Horizon window (1 to 24 hours).
-
-    Returns:
-        Exact signed impact deltas comparing the scenario against baseline zero-PV.
-    """
-    bounded_hours = max(1, min(24, int(horizon_hours)))
-    safe_pv = max(0.0, float(pv_capacity_kw))
-    safe_load = max(0.0, float(base_load_kw))
-    safe_feeder = float(feeder_capacity_kw) if feeder_capacity_kw and feeder_capacity_kw > 0 else None
-
-    system_user = _get_system_user()
-    db = SessionLocal()
-    try:
-        common = {
-            "hours": bounded_hours,
-            "region": "bd",
-            "current_user": system_user,
-            "db": db,
-            "record": False,
-            "feeder_capacity_kw": safe_feeder,
-            "base_load_kw": safe_load,
-        }
-        # Run baseline reference (0 PV)
-        ref_result = get_dispatch_plan(**common, pv_capacity_kw=0.0)
-        # Run scenario with target PV
-        scen_result = get_dispatch_plan(**common, pv_capacity_kw=safe_pv)
-
-        ref_kpis = ref_result.get("plan", {}).get("kpis", {})
-        scen_kpis = scen_result.get("plan", {}).get("kpis", {})
-
-        cost_delta = scen_kpis.get("optimized_cost", 0.0) - ref_kpis.get("optimized_cost", 0.0)
-        emissions_delta = (
-            scen_kpis.get("optimized_emissions_gco2", 0.0) - ref_kpis.get("optimized_emissions_gco2", 0.0)
-        ) / 1000.0
-        peak_delta = scen_kpis.get("peak_optimized_kw", 0.0) - ref_kpis.get("peak_optimized_kw", 0.0)
-
-        return {
-            "scenario_inputs": {
-                "pv_capacity_kw": safe_pv,
-                "base_load_kw": safe_load,
-                "feeder_limit_kw": safe_feeder,
-                "horizon_hours": bounded_hours,
-            },
-            "impact_vs_baseline": {
-                "cost_change_usd": round(cost_delta, 2),
-                "emissions_change_kg": round(emissions_delta, 2),
-                "peak_load_change_kw": round(peak_delta, 2),
-            },
-            "summary": (
-                f"Adding {safe_pv} kW solar capacity reduces net operating cost by "
-                f"${abs(round(cost_delta, 2))} and shaves {abs(round(emissions_delta, 2))} kg CO2."
-                if cost_delta <= 0
-                else f"Simulation completed with cost change: ${round(cost_delta, 2)}."
-            ),
-        }
-    finally:
-        db.close()
-
-
-def explain_asset_decision(asset_name: str) -> Dict[str, Any]:
-    """
-    Explains the economic and grid-stress rationale behind why an asset was scheduled
-    at a specific time slot.
-
-    Args:
-        asset_name: Identifier or name of the process or battery.
-
-    Returns:
-        Explanation detailing Time-of-Use (TOU) tariff windows and solar alignment.
-    """
-    tariff = _load_tariff()
-    peak_rate = tariff.get("peak_rate", 0.20)
-    offpeak_rate = tariff.get("offpeak_rate", 0.05)
-    peak_hours = tariff.get("peak_hours", [17, 18, 19, 20, 21, 22])
-
-    clean_name = asset_name.strip().lower()
-
-    if "battery" in clean_name or "bess" in clean_name:
-        return {
-            "asset": asset_name,
-            "strategy": "Arbitrage & Peak Shaving",
-            "logic": (
-                f"The battery charges during off-peak hours (rate: ${offpeak_rate}/kWh) "
-                f"or during peak solar generation (10:00–14:00), and discharges during high-tariff "
-                f"grid stress hours (17:00–22:00, rate: ${peak_rate}/kWh). "
-                f"This captures maximum price spread while accounting for 95% round-trip efficiency."
-            ),
-        }
-
+def fetch_current_dispatch_plan(horizon_hours: int = 24) -> dict:
+    result = _preview(horizon_hours)
+    plan, kpis = result["plan"], result["plan"]["kpis"]
     return {
-        "asset": asset_name,
-        "strategy": "Non-interruptible Batch Load Shifting",
-        "logic": (
-            f"The MILP optimizer avoids scheduling continuous industrial batches during Bangladesh's "
-            f"peak tariff window ({peak_hours[0]}:00–{peak_hours[-1]}:00, ${peak_rate}/kWh). "
-            f"Instead, loads are shifted to night/morning off-peak hours (${offpeak_rate}/kWh) "
-            f"or synchronized with peak rooftop solar production, respecting machine deadline constraints."
-        ),
+        "status": "optimal", "scope": "Unsaved synthetic portfolio preview; not a user's saved plan",
+        "horizon_hours": result["hours"], "sources": result["forecast_used"]["sources"],
+        "timestamps": result["forecast_used"]["timestamps"], "assumptions": result["assumptions"],
+        "kpis": {"baseline_cost_usd": round(kpis["baseline_cost"], 2),
+                 "optimized_cost_usd": round(kpis["optimized_cost"], 2),
+                 "cost_savings_usd": round(kpis["cost_saved_usd"], 2),
+                 "carbon_saved_kg": round(kpis["co2_saved_kg"], 2),
+                 "peak_load_shaved_kw": round(kpis["peak_shaved_kw"], 2)},
+        "scheduled_processes_count": len(plan["industrial"]),
+        "industrial_processes": [
+            {"asset_id": p["asset_id"], "asset": p["name"], "power_kw": p["power_kw"],
+             "duration_hours": p["duration"], "deadline_hour": p["deadline"],
+             "optimal_start_hour": p["optimized_hours"][0] if p["optimized_hours"] else None,
+             "scheduled_hours": p["optimized_hours"], "cost_saved_usd": round(p["cost_saved"], 2),
+             "carbon_saved_kg": round(p["emissions_saved_gco2"] / 1000, 2)}
+            for p in plan["industrial"]],
+        "batteries": [
+            {"asset_id": b["asset_id"], "battery": b["asset_id"], "capacity_kwh": b["capacity_kwh"],
+             "charge_hours": [s["hour"] for s in b["schedule"] if s["charge_kw"] > 1e-5],
+             "discharge_hours": [s["hour"] for s in b["schedule"] if s["discharge_kw"] > 1e-5],
+             "cost_saved_usd": round(b["cost_saved"], 2)} for b in plan["batteries"]],
+        "note": "Modeled results, synthetic assets and tariff; no equipment control. Negative savings mean increases.",
     }
+
+
+def run_whatif_simulation(pv_capacity_kw: float = 0, base_load_kw: float = 0,
+                         feeder_capacity_kw: float | None = None, horizon_hours: int = 24) -> dict:
+    inputs = ScenarioInputs(pv_capacity_kw=pv_capacity_kw, base_load_kw=base_load_kw,
+                            feeder_capacity_kw=feeder_capacity_kw, horizon_hours=horizon_hours)
+    kwargs = inputs.model_dump()
+    reference = _preview(**{**kwargs, "pv_capacity_kw": 0})
+    scenario = _preview(**kwargs)
+    ref, scen = reference["plan"]["kpis"], scenario["plan"]["kpis"]
+    change = {"cost_change_usd": round(scen["optimized_cost"] - ref["optimized_cost"], 2),
+              "emissions_change_kg": round((scen["optimized_emissions_gco2"] - ref["optimized_emissions_gco2"]) / 1000, 2),
+              "peak_load_change_kw": round(scen["peak_optimized_kw"] - ref["peak_optimized_kw"], 2)}
+    return {"scenario_inputs": kwargs, "impact_vs_baseline": change,
+            "sources": scenario["forecast_used"]["sources"],
+            "summary": "Changes compare modeled optimized results with a zero-PV scenario. Negative changes mean reductions."}
+
+
+def explain_asset_decision(asset_name: str) -> dict:
+    name = asset_name.strip().casefold()
+    if not name or len(name) > 64:
+        raise ValueError("Provide an asset name or identifier of at most 64 characters.")
+    plan = fetch_current_dispatch_plan()
+    processes = [p for p in plan["industrial_processes"]
+                 if name in (p["asset"].casefold(), p["asset_id"].casefold())]
+    batteries = [b for b in plan["batteries"] if name == b["asset_id"].casefold()]
+    if name in ("battery", "bess", "ব্যাটারি") and plan["batteries"]:
+        batteries = plan["batteries"][:1]
+    if batteries:
+        asset = batteries[0]
+        return {"asset": asset["asset_id"], "strategy": "Modeled battery schedule",
+                "logic": f"Charge slots: {asset['charge_hours']}; discharge slots: {asset['discharge_hours']}. Slots are offsets from the first forecast timestamp.",
+                "evidence": asset, "sources": plan["sources"], "timestamps": plan["timestamps"],
+                "note": plan["note"]}
+    if processes:
+        asset = processes[0]
+        return {"asset": asset["asset"], "strategy": "Constrained batch scheduling",
+                "logic": f"Scheduled slots {asset['scheduled_hours']}; required duration {asset['duration_hours']}h; deadline slot {asset['deadline_hour']}. The solver balances modeled cost, carbon and peak import.",
+                "evidence": asset, "sources": plan["sources"], "timestamps": plan["timestamps"],
+                "note": plan["note"]}
+    return {"asset": asset_name, "error": "Asset not found in the synthetic portfolio preview.",
+            "available_assets": [p["asset"] for p in plan["industrial_processes"]] +
+                                [b["asset_id"] for b in plan["batteries"]]}

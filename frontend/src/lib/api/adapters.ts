@@ -206,6 +206,7 @@ export interface BackendBatteryPlan {
 }
 
 export interface BackendDispatchPlanResponse {
+  assumptions?: { custom_assets?: import('../types/dispatch').CustomAssetInput[] };
   status: string;
   region: string;
   hours: number;

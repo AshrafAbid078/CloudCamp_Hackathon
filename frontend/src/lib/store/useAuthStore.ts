@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { User, SignupRequest } from '../types';
 import { authApi } from '../api/client';
 import { useRoleStore } from './useRoleStore';
+import { useAppStore } from './use-app-store';
 
 interface AuthState {
   user: User | null;
@@ -126,6 +127,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    useAppStore.getState().clearCopilotMessages();
     if (typeof window !== 'undefined') {
       localStorage.removeItem('meridian_token');
       localStorage.removeItem('meridian_user');

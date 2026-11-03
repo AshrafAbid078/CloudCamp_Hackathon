@@ -25,25 +25,17 @@ interface AppState {
   decrementAlerts: () => void;
 }
 
-const INITIAL_MESSAGES: CopilotMessage[] = [
-  {
-    id: 'msg-init-1',
-    sender: 'assistant',
-    content: "Hello! I am your Solar & Grid Intelligence Copilot. I can help analyze today's GHI deviations, evaluate battery arbitrage opportunities, or prepare curtailment mitigation overrides.",
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    suggestedActions: [
-      { label: "Analyze 13:00 GHI drop", actionType: "inspect", payload: "13:00" },
-      { label: "Check battery state of charge", actionType: "navigate", payload: "/dispatch" },
-      { label: "Explain curtailment risk", actionType: "inspect", payload: "curtailment" }
-    ]
-  }
-];
+const INITIAL_MESSAGES: CopilotMessage[] = [{
+  id: 'msg-init-1', sender: 'assistant',
+  content: 'Ask about the regional forecast, a synthetic portfolio schedule, or an explicit PV capacity in kW. Sources and modeled assumptions appear with each tool result.',
+  timestamp: '',
+}];
 
 export const useAppStore = create<AppState>((set) => ({
   currentRole: 'grid_operator',
   setRole: (role) => set({ currentRole: role }),
 
-  selectedPlantId: 'mohave-solar-bess-1',
+  selectedPlantId: 'bangladesh-demo',
   setSelectedPlantId: (plantId) => set({ selectedPlantId: plantId }),
 
   isCopilotOpen: false,

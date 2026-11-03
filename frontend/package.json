@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:browser": "node scripts/browser-smoke.mjs"
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "test:project": "node scripts/project-regression.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

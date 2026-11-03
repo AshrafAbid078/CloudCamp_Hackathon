@@ -77,8 +77,8 @@ def solve_joint_schedule(
     problem += pulp.lpSum((prices[hour] + 0.001 * carbon_intensity[hour]) * grid[hour]
                           for hour in range(horizon)) + 0.01 * peak
     problem.solve(_get_solver())
-    if pulp.LpStatus[problem.status] != "Optimal":
-        raise ValueError("No feasible plan satisfies the shared grid constraints.")
+    if problem.status != pulp.LpStatusOptimal or problem.sol_status != pulp.LpSolutionOptimal:
+        raise ValueError("No feasible plan has been certified optimal within the solve limit.")
 
     process_hours = {}
     for p_index, process in enumerate(processes):
