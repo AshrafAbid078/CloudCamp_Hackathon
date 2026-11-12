@@ -137,7 +137,7 @@ export default function CopilotStudioPage() {
                       </span>
                       <span>•</span>
                       <span>{msg.timestamp || 'Just now'}</span>
-                      {msg.inferenceMode && <span>{msg.inferenceMode === 'gemini' ? 'Gemini + tool evidence' : 'Local tool response'}</span>}
+                      {msg.inferenceMode && <span>{msg.inferenceMode === 'gemini' ? 'Gemini + tool evidence' : msg.toolCalls?.length ? 'Local tool response' : 'Local response'}</span>}
                     </div>
 
                     {/* Markdown / Text Content */}

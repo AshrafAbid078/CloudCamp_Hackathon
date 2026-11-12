@@ -138,6 +138,34 @@ def test_model_budget_and_blocking_work_is_off_loop(monkeypatch):
     assert asyncio.run(service.chat_with_copilot("test"))["mode"] == "local_tools"
 
 
+@pytest.mark.parametrize("message", ["hi", " Hello! ", "hey there", "Good morning", "How are you?", "Thank you!"])
+@pytest.mark.parametrize("allow_llm", [False, True])
+def test_small_talk_skips_tools_and_model_calls(monkeypatch, message, allow_llm):
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    def unexpected(*args, **kwargs):
+        pytest.fail("Small talk must not run tools, spend model quota or make HTTP requests.")
+    monkeypatch.setattr(service, "_execute_local_tool", unexpected)
+    monkeypatch.setattr(service, "reserve_model_call", unexpected)
+    monkeypatch.setattr(service.httpx, "AsyncClient", unexpected)
+    result = asyncio.run(service.chat_with_copilot(message, allow_llm=allow_llm))
+    assert result["status"] == "success"
+    assert result["tool_calls"] == []
+    assert result["reply"] == service._rule_based_fallback(message, "facility_manager")["reply"]
+    assert "savings" not in result["reply"].lower()
+
+
+def test_greeting_with_planning_question_still_fetches_evidence(monkeypatch):
+    calls = []
+    def forecast(name, args):
+        calls.append(name)
+        return {"solar": {"peak_ghi_w_per_m2": 800, "peak_solar_time": "noon"},
+                "carbon_telemetry": {"average_intensity_gco2_kwh": 710}, "sources": {}}
+    monkeypatch.setattr(service, "_execute_local_tool", forecast)
+    result = asyncio.run(service.chat_with_copilot("Hi, show the solar forecast", allow_llm=False))
+    assert calls == ["get_solar_forecast"]
+    assert len(result["tool_calls"]) == 1
+
+
 def test_gemini_multi_tool_exchange_and_safe_key_header(monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "test-key")
     monkeypatch.setattr(service, "reserve_model_call", lambda: True)

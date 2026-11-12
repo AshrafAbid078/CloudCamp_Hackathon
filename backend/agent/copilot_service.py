@@ -44,8 +44,25 @@ async def _fallback(message: str, role: str, history: list[dict]) -> dict:
     return await run_in_threadpool(_rule_based_fallback, message, role, history)
 
 
+def _conversation_response(message: str, role: str) -> dict | None:
+    text = message.strip().lower().rstrip(".!? ")
+    if re.fullmatch(r"(?:hi|hello|hey)(?: there| copilot)?|good (?:morning|afternoon|evening)", text):
+        reply = "Hi! I'm Meridian Copilot. How can I help with your energy planning today?"
+    elif text in {"how are you", "how are you doing"}:
+        reply = "I'm ready to help! What would you like to explore about your energy plan?"
+    elif text in {"thanks", "thank you", "thanks a lot"}:
+        reply = "You're welcome! Let me know if you need anything else with your energy planning."
+    else:
+        return None
+    return {"status": "success", "mode": "local_tools", "role": role, "reply": reply, "tool_calls": []}
+
+
 async def chat_with_copilot(message: str, role: str = "facility_manager",
                             conversation_history: list[dict] | None = None, *, allow_llm: bool = True) -> dict:
+    # Small talk needs neither portfolio calculations nor a paid model call.
+    conversation = _conversation_response(message, role)
+    if conversation is not None:
+        return conversation
     history = conversation_history or []
     key, model = settings.gemini_api_key.strip(), settings.copilot_model.strip()
     if not allow_llm or not key or not re.fullmatch(r"[\w.-]+", model):
@@ -96,6 +113,9 @@ async def chat_with_copilot(message: str, role: str = "facility_manager",
 
 
 def _rule_based_fallback(message: str, role: str, history: list[dict] | None = None) -> dict:
+    conversation = _conversation_response(message, role)
+    if conversation is not None:
+        return conversation
     text = message.lower().translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789"))
     bangla = bool(re.search(r"[\u0980-\u09ff]", message))
     records = []
