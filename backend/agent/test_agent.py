@@ -166,6 +166,45 @@ def test_greeting_with_planning_question_still_fetches_evidence(monkeypatch):
     assert len(result["tool_calls"]) == 1
 
 
+@pytest.mark.parametrize("message, expected", [
+    ("Tell me about this software.", "Bangladesh-focused energy planning prototype"),
+    ("What is Meridian Grid?", "not measured savings"),
+    ("Explain this app", "No physical equipment is connected"),
+    ("How do I use this app?", "1. Open /guide"),
+    ("How can I get started?", "save the complete plan"),
+    ("How to use Meridian Grid", "check the solar/carbon sources and timestamps"),
+    ("What features do you have?", "not your saved custom plan"),
+    ("What can you do?", "What if we install 200 kW solar?"),
+    ("Show me your features", "savings are modeled, not measured"),
+    ("  HELP   me!  ", "public guide at /guide"),
+])
+@pytest.mark.parametrize("allow_llm", [False, True])
+def test_product_help_without_solver_or_paid_model(monkeypatch, message, expected, allow_llm):
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    def unexpected(*args, **kwargs):
+        pytest.fail("Documented product help must not run tools or call the paid model.")
+    monkeypatch.setattr(service, "_execute_local_tool", unexpected)
+    monkeypatch.setattr(service, "reserve_model_call", unexpected)
+    monkeypatch.setattr(service.httpx, "AsyncClient", unexpected)
+    result = asyncio.run(service.chat_with_copilot(message, role="grid_operator", allow_llm=allow_llm))
+    assert result["status"] == "success"
+    assert result["mode"] == "local_tools"
+    assert result["role"] == "grid_operator"
+    assert result["tool_calls"] == []
+    assert expected in result["reply"]
+    assert service._rule_based_fallback(message, "grid_operator") == result
+
+
+@pytest.mark.parametrize("message", [
+    "What can you do about today's solar forecast?",
+    "Tell me about this software and show my savings",
+    "How do I use this app to install 200 kW solar?",
+    "Explain the battery decision",
+])
+def test_product_help_does_not_swallow_planning_questions(message):
+    assert service._conversation_response(message, "facility_manager") is None
+
+
 def test_gemini_multi_tool_exchange_and_safe_key_header(monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "test-key")
     monkeypatch.setattr(service, "reserve_model_call", lambda: True)

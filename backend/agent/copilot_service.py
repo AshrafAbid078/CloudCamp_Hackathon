@@ -45,13 +45,51 @@ async def _fallback(message: str, role: str, history: list[dict]) -> dict:
 
 
 def _conversation_response(message: str, role: str) -> dict | None:
-    text = message.strip().lower().rstrip(".!? ")
+    text = " ".join(message.lower().split()).rstrip(".!? ")
     if re.fullmatch(r"(?:hi|hello|hey)(?: there| copilot)?|good (?:morning|afternoon|evening)", text):
         reply = "Hi! I'm Meridian Copilot. How can I help with your energy planning today?"
     elif text in {"how are you", "how are you doing"}:
         reply = "I'm ready to help! What would you like to explore about your energy plan?"
     elif text in {"thanks", "thank you", "thanks a lot"}:
         reply = "You're welcome! Let me know if you need anything else with your energy planning."
+    elif re.fullmatch(
+        r"(?:tell me about|describe|explain|what is|what's) (?:this|the) (?:software|app|application|product)"
+        r"|(?:tell me about|describe|explain|what is|what's) meridian(?: grid)?", text
+    ):
+        reply = (
+            "Meridian Grid is a Bangladesh-focused energy planning prototype. It combines regional solar "
+            "and grid-carbon outlooks with flexible machine and battery scheduling so you can compare "
+            "modeled cost, emissions and peak grid import before reviewing a plan. Facility assets and "
+            "tariffs are synthetic; results are modeled comparisons, not measured savings. No physical "
+            "equipment is connected. Read the public guide at /guide for a walkthrough."
+        )
+    elif re.fullmatch(
+        r"how (?:do i|can i|to) (?:use (?:this|the) (?:software|app|application)|use meridian(?: grid)?|get started)"
+        r"|(?:show|give) me (?:a |the )?(?:getting started guide|walkthrough)", text
+    ):
+        reply = (
+            "To get started with Meridian Grid:\n"
+            "1. Open /guide for the public walkthrough, then create an account or sign in.\n"
+            "2. In Forecast, choose a horizon and check the solar/carbon sources and timestamps.\n"
+            "3. In Dispatch, review machine windows, add a custom process if needed and compare a plan.\n"
+            "4. Review the signed cost, carbon and peak changes, then save the complete plan.\n"
+            "5. Open History to revisit saved plans and record a decision if your role permits it.\n"
+            "Plans are modeled demo results; they do not control equipment."
+        )
+    elif re.fullmatch(
+        r"what (?:features|capabilities) (?:do you|does (?:this|the) (?:software|app|application)|does meridian(?: grid)?) have"
+        r"|what can you do|(?:list|show)(?: me)? (?:your|the|this app's) features|help(?: me)?", text
+    ):
+        reply = (
+            "Meridian Grid includes regional solar and carbon outlooks with source labels; machine and "
+            "battery scheduling; custom machine inputs; PV-capacity scenario comparisons; and saved plans, "
+            "history and role-based review decisions. The public guide at /guide explains the workflow.\n"
+            "I can fetch a regional forecast, preview a synthetic portfolio schedule, compare an explicit "
+            "PV capacity with zero PV, or explain a demo asset's schedule. Try 'Show the solar forecast' "
+            "or 'What if we install 200 kW solar?'\n"
+            "My tools inspect unsaved synthetic portfolio previews, not your saved custom plan. "
+            "Forecasts can use labelled archived fallbacks; savings are modeled, not measured."
+        )
     else:
         return None
     return {"status": "success", "mode": "local_tools", "role": role, "reply": reply, "tool_calls": []}
@@ -59,7 +97,7 @@ def _conversation_response(message: str, role: str) -> dict | None:
 
 async def chat_with_copilot(message: str, role: str = "facility_manager",
                             conversation_history: list[dict] | None = None, *, allow_llm: bool = True) -> dict:
-    # Small talk needs neither portfolio calculations nor a paid model call.
+    # Small talk and documented product help need neither calculations nor a paid model call.
     conversation = _conversation_response(message, role)
     if conversation is not None:
         return conversation
