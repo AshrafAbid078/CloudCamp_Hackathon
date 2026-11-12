@@ -168,12 +168,19 @@ def test_greeting_with_planning_question_still_fetches_evidence(monkeypatch):
 
 @pytest.mark.parametrize("message, expected", [
     ("Tell me about this software.", "Bangladesh-focused energy planning prototype"),
+    ("tell me about this project", "Bangladesh-focused energy planning prototype"),
+    ("Describe this platform", "not measured savings"),
+    ("What is this website?", "No physical equipment is connected"),
     ("What is Meridian Grid?", "not measured savings"),
     ("Explain this app", "No physical equipment is connected"),
     ("How do I use this app?", "1. Open /guide"),
+    ("How do I use this project?", "1. Open /guide"),
+    ("How can I use this platform?", "save the complete plan"),
     ("How can I get started?", "save the complete plan"),
     ("How to use Meridian Grid", "check the solar/carbon sources and timestamps"),
     ("What features do you have?", "not your saved custom plan"),
+    ("What features does this project have?", "not your saved custom plan"),
+    ("What capabilities does this website have?", "savings are modeled, not measured"),
     ("What can you do?", "What if we install 200 kW solar?"),
     ("Show me your features", "savings are modeled, not measured"),
     ("  HELP   me!  ", "public guide at /guide"),
@@ -198,6 +205,7 @@ def test_product_help_without_solver_or_paid_model(monkeypatch, message, expecte
 @pytest.mark.parametrize("message", [
     "What can you do about today's solar forecast?",
     "Tell me about this software and show my savings",
+    "Tell me about this project and show the dispatch schedule",
     "How do I use this app to install 200 kW solar?",
     "Explain the battery decision",
 ])

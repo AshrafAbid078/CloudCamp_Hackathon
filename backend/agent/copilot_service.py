@@ -53,7 +53,7 @@ def _conversation_response(message: str, role: str) -> dict | None:
     elif text in {"thanks", "thank you", "thanks a lot"}:
         reply = "You're welcome! Let me know if you need anything else with your energy planning."
     elif re.fullmatch(
-        r"(?:tell me about|describe|explain|what is|what's) (?:this|the) (?:software|app|application|product)"
+        r"(?:tell me about|describe|explain|what is|what's) (?:this|the) (?:software|app|application|product|project|platform|website)"
         r"|(?:tell me about|describe|explain|what is|what's) meridian(?: grid)?", text
     ):
         reply = (
@@ -64,7 +64,7 @@ def _conversation_response(message: str, role: str) -> dict | None:
             "equipment is connected. Read the public guide at /guide for a walkthrough."
         )
     elif re.fullmatch(
-        r"how (?:do i|can i|to) (?:use (?:this|the) (?:software|app|application)|use meridian(?: grid)?|get started)"
+        r"how (?:do i|can i|to) (?:use (?:this|the) (?:software|app|application|product|project|platform|website)|use meridian(?: grid)?|get started)"
         r"|(?:show|give) me (?:a |the )?(?:getting started guide|walkthrough)", text
     ):
         reply = (
@@ -77,7 +77,7 @@ def _conversation_response(message: str, role: str) -> dict | None:
             "Plans are modeled demo results; they do not control equipment."
         )
     elif re.fullmatch(
-        r"what (?:features|capabilities) (?:do you|does (?:this|the) (?:software|app|application)|does meridian(?: grid)?) have"
+        r"what (?:features|capabilities) (?:do you|does (?:this|the) (?:software|app|application|product|project|platform|website)|does meridian(?: grid)?) have"
         r"|what can you do|(?:list|show)(?: me)? (?:your|the|this app's) features|help(?: me)?", text
     ):
         reply = (
